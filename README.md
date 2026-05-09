@@ -31,14 +31,7 @@ The SwiftMart project aims to bridge the gap between users and products through 
 - **State Management**: (To be determined - e.g., Provider/Bloc)
 - **Design Pattern**: MVC/Clean Architecture
 
-## 👥 The Team
-This project is developed as part of the **Mobile Application Development (MAD)** course by:
 
-| Name | Role |
-| :--- | :--- |
-| **Dawood Sajid**  | Lead Developer |
-| **Noor Ullah** | Developer |
-|
 
 ## 📂 Project Structure
 ```text
@@ -50,21 +43,6 @@ lib/
 └── main.dart        # Entry point of the application
 ```
 
-## ⚙️ Getting Started
-To get a local copy up and running, follow these simple steps:
-
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/daudx/SwiftMart.git
-   ```
-2. **Install dependencies**:
-   ```bash
-   flutter pub get
-   ```
-3. **Run the app**:
-   ```bash
-   flutter run
-   ```
 
 ---
 
