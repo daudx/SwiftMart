@@ -12,7 +12,6 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
-  // ── Controllers ───────────────────────────────────────────────
   final _nameController     = TextEditingController();
   final _emailController    = TextEditingController();
   final _phoneController    = TextEditingController();
@@ -30,7 +29,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
     super.dispose();
   }
 
-  // ── Create Account ────────────────────────────────────────────
   Future<void> _createAccount() async {
     if (_isLoading) return;
     setState(() => _isLoading = true);
@@ -46,15 +44,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
     setState(() => _isLoading = false);
 
     if (result.success) {
-      Navigator.pushReplacementNamed(context, AppRoutes.home);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(result.error ?? 'Registration failed.'),
-          backgroundColor: AppColors.surfaceContainerHigh,
-          behavior: SnackBarBehavior.floating,
-        ),
+      // ── Sign out immediately after registration ─────────────
+      // Firebase auto-signs-in on createUserWithEmailAndPassword.
+      // We sign out so the user must consciously enter their
+      // credentials on the login screen — standard auth UX.
+      await AuthService().logout();
+
+      if (!mounted) return;
+
+      // ── Navigate to Login with success flag ─────────────────
+      // The login screen reads this argument and shows a
+      // "Account created! Please sign in." success banner.
+      Navigator.pushReplacementNamed(
+        context,
+        AppRoutes.login,
+        arguments: {'fromRegistration': true},
       );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(result.error ?? 'Registration failed.'),
+        backgroundColor: AppColors.surfaceContainerHigh,
+        behavior: SnackBarBehavior.floating,
+      ));
     }
   }
 
@@ -107,8 +118,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       decoration: BoxDecoration(
         color: AppColors.ctaGradientEnd,
         borderRadius: BorderRadius.circular(32),
-        boxShadow: AppShadows.raised,
-      ),
+        boxShadow: AppShadows.raised),
       child: const Column(
         children: [
           Text('SwiftMart',
@@ -132,8 +142,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       decoration: BoxDecoration(
         color: AppColors.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(32),
-        boxShadow: AppShadows.raised,
-      ),
+        boxShadow: AppShadows.raised),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -184,8 +193,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       fontWeight: FontWeight.w500, color: AppColors.onSurface),
                   decoration: const InputDecoration(
                     border: InputBorder.none, isDense: true,
-                    contentPadding: EdgeInsets.zero,
-                  ),
+                    contentPadding: EdgeInsets.zero),
                 ),
               ),
             ],
@@ -204,14 +212,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
         _buildInputContainer(
           child: Row(
             children: [
-              const Icon(Icons.lock_outline, size: 20,
-                  color: AppColors.primary),
+              const Icon(Icons.lock_outline, size: 20, color: AppColors.primary),
               const SizedBox(width: 12),
               Expanded(
                 child: TextField(
                   controller: _passwordController,
                   obscureText: _obscurePassword,
-                  // ── WIRED: submit on keyboard done ──────────
                   onSubmitted: (_) => _createAccount(),
                   style: const TextStyle(fontFamily: 'Inter', fontSize: 14,
                       fontWeight: FontWeight.w500, color: AppColors.onSurface),
@@ -221,19 +227,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         fontWeight: FontWeight.w500,
                         color: AppColors.outlineVariant),
                     border: InputBorder.none, isDense: true,
-                    contentPadding: EdgeInsets.zero,
-                  ),
+                    contentPadding: EdgeInsets.zero),
                 ),
               ),
               GestureDetector(
-                onTap: () => setState(
-                    () => _obscurePassword = !_obscurePassword),
+                onTap: () =>
+                    setState(() => _obscurePassword = !_obscurePassword),
                 child: Icon(
-                  _obscurePassword
-                      ? Icons.visibility_outlined
+                  _obscurePassword ? Icons.visibility_outlined
                       : Icons.visibility_off_outlined,
-                  size: 20, color: AppColors.outlineVariant,
-                ),
+                  size: 20, color: AppColors.outlineVariant),
               ),
             ],
           ),
@@ -248,8 +251,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       decoration: BoxDecoration(
         color: AppColors.surfaceContainerHigh,
         borderRadius: BorderRadius.circular(12),
-        boxShadow: AppShadows.pressed,
-      ),
+        boxShadow: AppShadows.pressed),
       child: child,
     );
   }
@@ -264,17 +266,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 
-  // ── WIRED: calls AuthService().register() ─────────────────────
   Widget _buildCreateButton() {
     return Container(
       decoration: BoxDecoration(
         gradient: const LinearGradient(
           colors: [AppColors.ctaGradientStart, AppColors.ctaGradientEnd],
-          begin: Alignment.topLeft, end: Alignment.bottomRight,
-        ),
+          begin: Alignment.topLeft, end: Alignment.bottomRight),
         borderRadius: BorderRadius.circular(999),
-        boxShadow: AppShadows.raised,
-      ),
+        boxShadow: AppShadows.raised),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
@@ -284,10 +283,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
             padding: const EdgeInsets.symmetric(vertical: 16),
             child: Center(
               child: _isLoading
-                  ? const SizedBox(
-                      width: 20, height: 20,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2,
+                  ? const SizedBox(width: 20, height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2,
                           color: Color(0xFF04342C)))
                   : const Text('Create Account',
                       style: TextStyle(fontFamily: 'Inter', fontSize: 18,
@@ -313,8 +310,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 context, AppRoutes.login),
             child: const Text('Log In',
               style: TextStyle(fontFamily: 'Inter', fontSize: 14,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.tertiary)),
+                  fontWeight: FontWeight.bold, color: AppColors.tertiary)),
           ),
         ],
       ),
@@ -340,18 +336,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   Widget _buildOrb(double size, Color color) {
     return IgnorePointer(
-      child: Container(
-        width: size, height: size,
-        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-      ),
+      child: Container(width: size, height: size,
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
     );
   }
 }
 
 class _FeatureBadge extends StatelessWidget {
   final IconData icon;
-  final Color color;
-  final String label;
+  final Color    color;
+  final String   label;
   const _FeatureBadge(
       {required this.icon, required this.color, required this.label});
 
@@ -362,10 +356,8 @@ class _FeatureBadge extends StatelessWidget {
         Container(
           width: 56, height: 56,
           decoration: BoxDecoration(
-            color: AppColors.surfaceContainerHigh,
-            shape: BoxShape.circle,
-            boxShadow: AppShadows.raised,
-          ),
+            color: AppColors.surfaceContainerHigh, shape: BoxShape.circle,
+            boxShadow: AppShadows.raised),
           child: Icon(icon, size: 28, color: color),
         ),
         const SizedBox(height: 8),

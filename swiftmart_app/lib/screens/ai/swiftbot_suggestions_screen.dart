@@ -19,11 +19,19 @@ class SwiftBotSuggestionsScreen extends StatefulWidget {
 class _SwiftBotSuggestionsScreenState extends State<SwiftBotSuggestionsScreen> {
   int _navIndex = 2;
   bool _isThinking = false;
+  List<ProductModel> _products = [];
+  bool _loadingProducts = true;
 
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
   final _ai = AiService();
   final _cart = CartService();
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProducts();
+  }
 
   // Seed product data matching the UI
   static const List<_SeedProduct> _seedProducts = [
@@ -72,6 +80,20 @@ class _SwiftBotSuggestionsScreenState extends State<SwiftBotSuggestionsScreen> {
 
     if (!mounted) return;
     setState(() => _isThinking = false);
+  }
+
+  Future<void> _loadProducts() async {
+    final ids =
+        ModalRoute.of(context)?.settings.arguments as List<String>? ?? [];
+
+    final result = await _ai.getProductSuggestions(ids);
+
+    if (!mounted) return;
+
+    setState(() {
+      _products = result.data ?? [];
+      _loadingProducts = false;
+    });
   }
 
   // ── WIRED: nav handler properly navigates ─────────────────────
@@ -278,15 +300,36 @@ class _SwiftBotSuggestionsScreenState extends State<SwiftBotSuggestionsScreen> {
   }
 
   Widget _buildProductCardsRow() {
+    if (_loadingProducts) {
+      return SizedBox(
+        height: 268,
+        child: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_products.isEmpty) {
+      return SizedBox(
+        height: 268,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.only(right: 16, bottom: 16),
+          physics: const ClampingScrollPhysics(),
+          itemCount: _seedProducts.length,
+          separatorBuilder: (_, _) => const SizedBox(width: 16),
+          itemBuilder: (_, i) => _buildProductCard(_seedProducts[i]),
+        ),
+      );
+    }
+
     return SizedBox(
       height: 268,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.only(right: 16, bottom: 16),
         physics: const ClampingScrollPhysics(),
-        itemCount: _seedProducts.length,
+        itemCount: _products.length,
         separatorBuilder: (_, _) => const SizedBox(width: 16),
-        itemBuilder: (_, i) => _buildProductCard(_seedProducts[i]),
+        itemBuilder: (_, i) => _buildRealProductCard(_products[i]),
       ),
     );
   }
@@ -374,6 +417,23 @@ class _SwiftBotSuggestionsScreenState extends State<SwiftBotSuggestionsScreen> {
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRealProductCard(ProductModel product) {
+    return Container(
+      width: 256,
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          Image.network(product.imageUrl, height: 120),
+          const SizedBox(height: 12),
+
+          Text(product.name),
+
+          Text('\$\${product.price}'),
         ],
       ),
     );

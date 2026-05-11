@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_shadows.dart';
 import '../../models/message_model.dart';
+import '../../routes/app_routes.dart';
 import '../../services/ai_service.dart';
 
 class SwiftBotScreen extends StatefulWidget {
@@ -17,13 +18,13 @@ class _SwiftBotScreenState extends State<SwiftBotScreen>
 
   final _inputController = TextEditingController();
   final _scrollController = ScrollController();
-
-  // ── WIRED: use AiService singleton ───────────────────────────
   final _ai = AiService();
 
-  // ── WIRED: messages driven by AiService.history ──────────────
-  List<MessageModel> get _messages =>
-      _ai.history.isEmpty ? MessageModel.seedMessages : _ai.history;
+  // ── Local message list ────────────────────────────────────────
+  // Starts with seed messages if no history yet.
+  // User messages are added here immediately (optimistic) so the
+  // UI responds before the API call completes.
+  late List<MessageModel> _messages;
 
   late final AnimationController _pulseController;
   late final Animation<double> _pulseAnimation;
@@ -38,10 +39,17 @@ class _SwiftBotScreenState extends State<SwiftBotScreen>
   @override
   void initState() {
     super.initState();
+
+    // Seed from history or use default greeting messages
+    _messages = _ai.history.isEmpty
+        ? List.of(MessageModel.seedMessages)
+        : List.of(_ai.history);
+
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 900),
     )..repeat(reverse: true);
+
     _pulseAnimation = Tween<double>(begin: 0.4, end: 1.0).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
@@ -55,21 +63,56 @@ class _SwiftBotScreenState extends State<SwiftBotScreen>
     super.dispose();
   }
 
-  // ── WIRED: send message to AiService ─────────────────────────
+  // ── Send message ──────────────────────────────────────────────
   Future<void> _sendMessage() async {
     final text = _inputController.text.trim();
     if (text.isEmpty || _isThinking) return;
 
     _inputController.clear();
-    setState(() => _isThinking = true);
+
+    // ── Step 1: Add user message to UI immediately ─────────────
+    final userMsg = MessageModel.fromUser(text: text, time: _currentTime());
+    setState(() {
+      _messages.add(userMsg);
+      _isThinking = true;
+    });
     _scrollToBottom();
 
+    // ── Step 2: Call AI service ────────────────────────────────
     final result = await _ai.sendMessage(text);
 
     if (!mounted) return;
-    setState(() => _isThinking = false);
 
-    if (!result.success) {
+    if (result.success) {
+      final botMsg = result.data!;
+
+      // ── Step 3: Add bot reply to UI ─────────────────────────
+      setState(() {
+        _messages.add(botMsg);
+        _isThinking = false;
+      });
+      _scrollToBottom();
+
+      // ── Step 4: Navigate to suggestions if products found ────
+      if (botMsg.hasSuggestions) {
+        await Future.delayed(const Duration(milliseconds: 600));
+        if (!mounted) return;
+        Navigator.pushNamed(
+          context,
+          AppRoutes.swiftBotSuggest,
+          // Pass suggested product IDs to the suggestions screen
+          arguments: botMsg.suggestedProductIds,
+        );
+      }
+    } else {
+      // Remove the optimistically-added user message on failure
+      setState(() {
+        if (_messages.isNotEmpty && _messages.last.isUser) {
+          _messages.removeLast();
+        }
+        _isThinking = false;
+      });
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(result.error ?? 'SwiftBot unavailable.'),
@@ -78,7 +121,18 @@ class _SwiftBotScreenState extends State<SwiftBotScreen>
         ),
       );
     }
-    _scrollToBottom();
+  }
+
+  String _currentTime() {
+    final now = DateTime.now();
+    final h = now.hour == 0
+        ? 12
+        : now.hour > 12
+        ? now.hour - 12
+        : now.hour;
+    final m = now.minute.toString().padLeft(2, '0');
+    final ap = now.hour >= 12 ? 'PM' : 'AM';
+    return '$h:$m $ap';
   }
 
   void _scrollToBottom() {
@@ -119,7 +173,6 @@ class _SwiftBotScreenState extends State<SwiftBotScreen>
                     ),
                   ),
                 ),
-                // ── Thinking indicator ────────────────────────
                 if (_isThinking)
                   SliverToBoxAdapter(
                     child: Padding(
@@ -277,9 +330,8 @@ class _SwiftBotScreenState extends State<SwiftBotScreen>
     );
   }
 
-  Widget _buildMessage(MessageModel msg) {
-    return msg.isBot ? _buildBotMessage(msg) : _buildUserMessage(msg);
-  }
+  Widget _buildMessage(MessageModel msg) =>
+      msg.isBot ? _buildBotMessage(msg) : _buildUserMessage(msg);
 
   Widget _buildBotMessage(MessageModel msg) {
     return Align(
@@ -314,6 +366,47 @@ class _SwiftBotScreenState extends State<SwiftBotScreen>
                     ),
                   ),
                 ),
+                // Show "See products →" chip if suggestions available
+                if (msg.hasSuggestions) ...[
+                  const SizedBox(height: 8),
+                  GestureDetector(
+                    onTap: () => Navigator.pushNamed(
+                      context,
+                      AppRoutes.swiftBotSuggest,
+                      arguments: msg.suggestedProductIds,
+                    ),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryContainer,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.shopping_bag_outlined,
+                            color: AppColors.onPrimaryContainer,
+                            size: 14,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'See ${msg.suggestedProductIds.length} products →',
+                            style: const TextStyle(
+                              fontFamily: 'Inter',
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.onPrimaryContainer,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
                 if (msg.showTypingIndicator) ...[
                   const SizedBox(height: 12),
                   _buildTypingIndicator(),
@@ -461,7 +554,6 @@ class _SwiftBotScreenState extends State<SwiftBotScreen>
 
   Widget _buildQuickChip(_QuickAction action) {
     return GestureDetector(
-      // ── WIRED: quick action sends preset message ──────────────
       onTap: () {
         if (action.label != null) {
           _inputController.text = action.label!;
@@ -509,13 +601,10 @@ class _SwiftBotScreenState extends State<SwiftBotScreen>
       padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
       child: Row(
         children: [
-          GestureDetector(
-            onTap: () {},
-            child: const Icon(
-              Icons.attach_file,
-              color: AppColors.onSurfaceVariant,
-              size: 24,
-            ),
+          const Icon(
+            Icons.attach_file,
+            color: AppColors.onSurfaceVariant,
+            size: 24,
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -527,7 +616,6 @@ class _SwiftBotScreenState extends State<SwiftBotScreen>
               ),
               child: TextField(
                 controller: _inputController,
-                // ── WIRED: send on keyboard submit ────────────
                 onSubmitted: (_) => _sendMessage(),
                 style: const TextStyle(
                   fontFamily: 'Inter',
@@ -553,7 +641,6 @@ class _SwiftBotScreenState extends State<SwiftBotScreen>
           ),
           const SizedBox(width: 16),
           GestureDetector(
-            // ── WIRED: send button calls _sendMessage() ───────
             onTap: _sendMessage,
             child: Container(
               width: 48,

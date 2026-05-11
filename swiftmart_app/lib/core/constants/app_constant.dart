@@ -15,9 +15,9 @@ class AppConstants {
   // ── Anthropic / SwiftBot ──────────────────────────────────────
   // Replace with your real key via --dart-define or flutter_dotenv.
   // NEVER commit a real key to source control.
-  static const String anthropicApiKey    = 'YOUR_API_KEY_HERE';
-  static const String anthropicModel     = 'claude-sonnet-4-6';
-  static const int    anthropicMaxTokens = 1024;
+  static const String geminiApiKey = 'AIzaSyDl1plaInovZ_9WKRyzSvSIYJhcmfhYSoA';
+ static const String geminiModel = 'gemini-1.5-flash';
+  static const int    geminiMaxTokens = 1024;
 
   // ── Firebase collection names (used in next phase) ────────────
   static const String colUsers    = 'users';
