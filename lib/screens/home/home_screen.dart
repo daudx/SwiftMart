@@ -8,7 +8,8 @@ import '../../routes/app_routes.dart';
 import '../../services/cart_service.dart';
 import '../../services/product_service.dart';
 import '../../widgets/neumorphic_container.dart';
-import '../../widgets/bottom_nav.dart'; // Make sure BottomNav is imported
+import '../../widgets/bottom_nav.dart';
+import '../../core/constants/app_constant.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -19,24 +20,16 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _navIndex = 0;
-  int _selectedSizeIndex = 2;
-  int _selectedThumbIndex = 0;
-  bool _isAddingToCart = false;
-  bool _isLoading = true;
 
   // ── Services ──────────────────────────────────────────────────
   final _productService = ProductService();
   final _cartService = CartService();
-
-  // ── Product loaded from ProductService ────────────────────────
-  ProductModel? _product;
 
   final _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
-    _loadProduct();
   }
 
   @override
@@ -45,44 +38,8 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  // ── WIRED: load featured product from ProductService ──────────
-  Future<void> _loadProduct() async {
-    final result = await _productService.getProductById('prd_001');
-    if (!mounted) return;
-    setState(() {
-      _isLoading = false;
-      if (result.success) _product = result.data;
-    });
-  }
+  // ── Navigation ────────────────────────────────────────────────
 
-  // ── WIRED: Add to Cart calls CartService ──────────────────────
-  Future<void> _addToCart() async {
-    if (_product == null || _isAddingToCart) return;
-    setState(() => _isAddingToCart = true);
-
-    final size = _product!.sizes.isNotEmpty
-        ? _product!.sizes[_selectedSizeIndex]
-        : 'One Size';
-
-    await _cartService.addItem(product: _product!, selectedSize: size);
-
-    if (!mounted) return;
-    setState(() => _isAddingToCart = false);
-
-    AppUtils.showSnackBar(
-      context,
-      '${_product!.name} (Size $size) added to cart! 🛍️',
-    );
-  }
-
-  // ── WIRED: Favourite toggle ───────────────────────────────────
-  Future<void> _toggleFavourite() async {
-    if (_product == null) return;
-    final result = await _productService.toggleFavourite(_product!.id);
-    if (mounted && result.success) {
-      setState(() => _product = result.data);
-    }
-  }
 
   // ── WIRED: Bottom nav with Shop tab now navigating ────────────
   void _handleBottomNavTap(int index) {
@@ -112,43 +69,35 @@ class _HomeScreenState extends State<HomeScreen> {
       body: ResponsiveLayout(
         child: Stack(
           children: [
-            // 1. Main scrollable content
+            // ── Scrollable Dashboard ──────────────────────────
             CustomScrollView(
               controller: _scrollController,
               scrollBehavior: _NoScrollbarBehavior(),
               slivers: [
-                const SliverToBoxAdapter(
-                  child: SizedBox(height: 100),
-                ), // Top spacing for AppBar
-                if (_isLoading)
-                  const SliverToBoxAdapter(child: _LoadingState())
-                else if (_product == null)
-                  const SliverToBoxAdapter(child: _ErrorState())
-                else ...[
-                  SliverToBoxAdapter(child: _buildHeroSection()),
-                  SliverToBoxAdapter(child: _buildInfoSection()),
-                ],
-                const SliverToBoxAdapter(
-                  child: SizedBox(height: 120),
-                ), // Bottom spacing for CTA
+                const SliverToBoxAdapter(child: SizedBox(height: 100)), // App Bar space
+
+                // ── Section 1: Hero Carousel (Featured) ──────
+                _buildHeroCarousel(),
+
+                // ── Section 2: Categories ─────────────────────
+                _buildCategorySection(),
+
+                // ── Section 3: Trending Now (Horizontal) ─────
+                _buildTrendingSection(),
+
+                // ── Section 4: Recommended for You (Grid) ────
+                _buildDiscoveryGridHeader(),
+                _buildDiscoveryGrid(),
+
+                const SliverToBoxAdapter(child: SizedBox(height: 120)), // Nav space
               ],
             ),
 
-            // 2. Restored Top App Bar
+            // ── Sticky Header ─────────────────────────────────
             Positioned(top: 0, left: 0, right: 0, child: _buildAppBar()),
-
-            // 3. Restored Add to Cart floating button
-            if (!_isLoading && _product != null)
-              Positioned(
-                bottom: 24,
-                left: 24,
-                right: 24,
-                child: _buildAddToCartButton(),
-              ),
           ],
         ),
       ),
-      // 4. Restored Bottom Navigation Bar
       bottomNavigationBar: BottomNav(
         currentIndex: _navIndex,
         onTap: _handleBottomNavTap,
@@ -171,12 +120,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       child: Row(
         children: [
-          // ── WIRED: menu navigates to admin ────────────────
-          GestureDetector(
-            onTap: () => Navigator.pushNamed(context, AppRoutes.admin),
-            child: const Icon(Icons.menu, color: AppColors.primary, size: 26),
-          ),
-          const SizedBox(width: 16),
           const Text(
             'SwiftMart',
             style: TextStyle(
@@ -188,7 +131,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const Spacer(),
-          // ── Cart badge ────────────────────────────────────
           GestureDetector(
             onTap: () => Navigator.pushNamed(context, AppRoutes.cart),
             child: Stack(
@@ -230,512 +172,307 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ── Hero image section ────────────────────────────────────────
-  Widget _buildHeroSection() {
-    final p = _product!;
-    final images = [p.imageUrl, ...p.thumbnailUrls];
+  // ── 1. Hero Carousel ────────────────────────────────────────
+  Widget _buildHeroCarousel() {
+    return SliverToBoxAdapter(
+      child: StreamBuilder<List<ProductModel>>(
+        stream: _productService.getProductsStream(),
+        builder: (context, snapshot) {
+          final featured = snapshot.data?.where((p) => p.isFeatured).toList() ?? [];
+          if (featured.isEmpty) return const SizedBox.shrink();
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 32, 24, 16),
-      child: Column(
-        children: [
-          // Main hero image
-          SwiftNeumorphicContainer(
-            type: NeumorphicType.raised,
-            borderRadius: 32,
-            padding: const EdgeInsets.all(32),
-            child: Stack(
-              children: [
-                AspectRatio(
-                  aspectRatio: 1,
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: Image.network(
-                      images[_selectedThumbIndex],
-                      fit: BoxFit.contain,
-                      errorBuilder: (_, _, _) => const Center(
-                        child: Icon(
-                          Icons.image_not_supported_outlined,
-                          color: AppColors.outlineVariant,
-                          size: 64,
-                        ),
-                      ),
-                    ),
+          return Container(
+            height: 240,
+            margin: const EdgeInsets.symmetric(vertical: 16),
+            child: PageView.builder(
+              itemCount: featured.length > 3 ? 3 : featured.length,
+              itemBuilder: (ctx, i) => _buildHeroSlide(featured[i]),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildHeroSlide(ProductModel p) {
+    return GestureDetector(
+      onTap: () => Navigator.pushNamed(context, AppRoutes.product, arguments: p),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 24),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(32),
+          boxShadow: AppShadows.raised,
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(32),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.network(p.imageUrl, fit: BoxFit.cover),
+              // Dark gradient overlay
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [Colors.transparent, Colors.black.withValues(alpha: 0.8)],
                   ),
                 ),
-                // ── WIRED: favourite toggle ───────────────
-                Positioned(
-                  top: 0,
-                  right: 0,
-                  child: GestureDetector(
-                    onTap: _toggleFavourite,
-                    child: SwiftNeumorphicContainer(
-                      type: NeumorphicType.raised,
-                      borderRadius: 999,
-                      padding: const EdgeInsets.all(12),
-                      child: Icon(
-                        p.isFavourite ? Icons.favorite : Icons.favorite_border,
+              ),
+              // Content
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
                         color: AppColors.tertiary,
-                        size: 22,
+                        borderRadius: BorderRadius.circular(6),
                       ),
+                      child: const Text('FEATURED',
+                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.black)),
                     ),
-                  ),
+                    const SizedBox(height: 8),
+                    Text(p.name,
+                      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.white)),
+                    Text('Premium Quality • Limited Edition',
+                      style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.7))),
+                  ],
                 ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── 2. Category Shortcuts ────────────────────────────────────
+  Widget _buildCategorySection() {
+    return SliverToBoxAdapter(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(24, 24, 24, 16),
+            child: Text('Categories',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.white)),
+          ),
+          SizedBox(
+            height: 100,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              itemCount: AppConstants.productCategories.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 20),
+              itemBuilder: (ctx, i) {
+                final cat = AppConstants.productCategories[i];
+                return GestureDetector(
+                  onTap: () => Navigator.pushNamed(context, AppRoutes.shop), // Should pass category arg
+                  child: Column(
+                    children: [
+                      SwiftNeumorphicContainer(
+                        type: NeumorphicType.raised,
+                        borderRadius: 999,
+                        padding: const EdgeInsets.all(16),
+                        child: Icon(_categoryIcon(cat), color: AppColors.primary, size: 24),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(cat, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.onSurfaceVariant)),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── 3. Trending Section ─────────────────────────────────────
+  Widget _buildTrendingSection() {
+    return SliverToBoxAdapter(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.fromLTRB(24, 32, 24, 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Trending Now',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.white)),
+                Text('See All',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.tertiary)),
               ],
             ),
           ),
-
-          const SizedBox(height: 32),
-
-          // Thumbnails — tapping changes hero image
-          if (images.length > 1)
-            SizedBox(
-              height: 80,
-              child: ListView.separated(
-                scrollDirection: Axis.horizontal,
-                physics: const ClampingScrollPhysics(),
-                itemCount: images.length,
-                separatorBuilder: (_, _) => const SizedBox(width: 16),
-                itemBuilder: (_, i) {
-                  final isActive = i == _selectedThumbIndex;
-                  return GestureDetector(
-                    // ── WIRED: tapping thumbnail changes hero ─
-                    onTap: () => setState(() => _selectedThumbIndex = i),
-                    child: Opacity(
-                      opacity: isActive ? 1.0 : 0.6,
-                      child: SwiftNeumorphicContainer(
-                        type: isActive
-                            ? NeumorphicType.pressed
-                            : NeumorphicType.raised,
-                        borderRadius: 16,
-                        padding: const EdgeInsets.all(8),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: Image.network(
-                            images[i],
-                            width: 64,
-                            height: 64,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, _, _) => Container(
-                              color: AppColors.surfaceContainerLowest,
-                              width: 64,
-                              height: 64,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
+          SizedBox(
+            height: 200,
+            child: StreamBuilder<List<ProductModel>>(
+              stream: _productService.getProductsStream(),
+              builder: (context, snapshot) {
+                final products = snapshot.data ?? [];
+                return ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  itemCount: products.length > 6 ? 6 : products.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 16),
+                  itemBuilder: (ctx, i) => _buildTrendingCard(products[i]),
+                );
+              },
             ),
-        ],
-      ),
-    );
-  }
-
-  // ── Info section ─────────────────────────────────────────────
-  Widget _buildInfoSection() {
-    final p = _product!;
-
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(32, 24, 32, 0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildProductHeader(p),
-          const SizedBox(height: 32),
-          _buildOverviewCard(p),
-          const SizedBox(height: 32),
-          _buildSpecGrid(p),
-          if (p.sizes.isNotEmpty) ...[
-            const SizedBox(height: 40),
-            _buildSizeSelector(p),
-          ],
-          const SizedBox(height: 32),
-          if (p.features.isNotEmpty) _buildFeaturesRow(p),
-        ],
-      ),
-    );
-  }
-
-  // ── Product header ───────────────────────────────────────────
-  Widget _buildProductHeader(ProductModel p) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                p.category,
-                style: const TextStyle(
-                  fontFamily: 'Inter',
-                  fontSize: 10,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 2.0,
-                  color: AppColors.secondary,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                p.name,
-                style: const TextStyle(
-                  fontFamily: 'Inter',
-                  fontSize: 30,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -0.6,
-                  color: AppColors.onSurface,
-                  height: 1.0,
-                ),
-              ),
-            ],
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTrendingCard(ProductModel p) {
+    return GestureDetector(
+      onTap: () => Navigator.pushNamed(context, AppRoutes.product, arguments: p),
+      child: Container(
+        width: 150,
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: AppShadows.raisedSmall,
         ),
-        const SizedBox(width: 16),
-        Text(
-          AppUtils.formatPrice(p.price),
-          style: const TextStyle(
-            fontFamily: 'Inter',
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: AppColors.tertiary,
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ── Overview card ────────────────────────────────────────────
-  Widget _buildOverviewCard(ProductModel p) {
-    return SwiftNeumorphicContainer(
-      type: NeumorphicType.raised,
-      borderRadius: 24,
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Product Overview',
-            style: TextStyle(
-              fontFamily: 'Inter',
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: AppColors.primary,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            p.description.isEmpty ? 'No description available.' : p.description,
-            style: const TextStyle(
-              fontFamily: 'Inter',
-              fontSize: 14,
-              color: AppColors.onSurfaceVariant,
-              height: 1.6,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Spec grid ────────────────────────────────────────────────
-  Widget _buildSpecGrid(ProductModel p) {
-    return Row(
-      children: [
-        if (p.weight.isNotEmpty)
-          Expanded(
-            child: _buildSpecCard(
-              Icons.monitor_weight_outlined,
-              'WEIGHT',
-              p.weight,
-            ),
-          ),
-        if (p.weight.isNotEmpty && p.energyReturn.isNotEmpty)
-          const SizedBox(width: 24),
-        if (p.energyReturn.isNotEmpty)
-          Expanded(
-            child: _buildSpecCard(Icons.bolt, 'ENERGY RETURN', p.energyReturn),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildSpecCard(IconData icon, String label, String value) {
-    return SwiftNeumorphicContainer(
-      type: NeumorphicType.pressed,
-      borderRadius: 16,
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(icon, color: AppColors.tertiary, size: 20),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  label,
-                  style: const TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.outlineVariant,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: const TextStyle(
-              fontFamily: 'Inter',
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: AppColors.onSurface,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Size selector ────────────────────────────────────────────
-  Widget _buildSizeSelector(ProductModel p) {
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'SELECT SIZE',
-              style: TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.5,
-                color: AppColors.secondary,
+            Expanded(
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                child: Image.network(p.imageUrl, fit: BoxFit.cover, width: double.infinity),
               ),
             ),
-            GestureDetector(
-              onTap: () {},
-              child: const Text(
-                'SIZE GUIDE',
-                style: TextStyle(
-                  fontFamily: 'Inter',
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.tertiary,
-                  decoration: TextDecoration.underline,
-                  decorationColor: AppColors.tertiary,
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(p.name,
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                  Text(AppUtils.formatPrice(p.price),
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: AppColors.tertiary)),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── 4. Discovery Grid ───────────────────────────────────────
+  Widget _buildDiscoveryGridHeader() {
+    return const SliverToBoxAdapter(
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(24, 40, 24, 16),
+        child: Text('Discover More',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.white)),
+      ),
+    );
+  }
+
+  Widget _buildDiscoveryGrid() {
+    return StreamBuilder<List<ProductModel>>(
+      stream: _productService.getProductsStream(),
+      builder: (context, snapshot) {
+        final products = snapshot.data ?? [];
+        return SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          sliver: SliverGrid(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 16,
+              mainAxisSpacing: 16,
+              childAspectRatio: 0.7,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (ctx, i) => _buildGridCard(products[i]),
+              childCount: products.length > 8 ? 8 : products.length,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildGridCard(ProductModel p) {
+    return GestureDetector(
+      onTap: () => Navigator.pushNamed(context, AppRoutes.product, arguments: p),
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: AppShadows.raisedSmall,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: 3,
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                child: Image.network(p.imageUrl, fit: BoxFit.cover, width: double.infinity),
+              ),
+            ),
+            Expanded(
+              flex: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(p.category, style: const TextStyle(fontSize: 8, fontWeight: FontWeight.w900, color: AppColors.secondary)),
+                        Text(p.name,
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                      ],
+                    ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(AppUtils.formatPrice(p.price),
+                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: AppColors.tertiary)),
+                        Icon(Icons.add_circle, color: AppColors.primary.withValues(alpha: 0.5), size: 20),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 16),
-        SizedBox(
-          height: 56,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            physics: const ClampingScrollPhysics(),
-            itemCount: p.sizes.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 12),
-            itemBuilder: (_, index) {
-              final isSelected = index == _selectedSizeIndex;
-              return GestureDetector(
-                onTap: () => setState(() => _selectedSizeIndex = index),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 180),
-                  curve: Curves.easeInOut,
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? AppColors.surfaceContainerLowest
-                        : AppColors.surfaceContainerHigh,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: isSelected
-                        ? AppShadows.pressed
-                        : AppShadows.raised,
-                    border: isSelected
-                        ? Border.all(
-                            color: AppColors.tertiary.withValues(alpha: 0.20),
-                          )
-                        : null,
-                  ),
-                  child: Center(
-                    child: Text(
-                      p.sizes[index],
-                      style: TextStyle(
-                        fontFamily: 'Inter',
-                        fontSize: 14,
-                        fontWeight: isSelected
-                            ? FontWeight.w900
-                            : FontWeight.w700,
-                        color: isSelected
-                            ? AppColors.tertiary
-                            : AppColors.onSurface,
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ── Features row ─────────────────────────────────────────────
-  Widget _buildFeaturesRow(ProductModel p) {
-    return SwiftNeumorphicContainer(
-      type: NeumorphicType.raised,
-      borderRadius: 24,
-      padding: const EdgeInsets.all(24),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: p.features
-            .take(3)
-            .map((f) => _FeatureItem(icon: _featureIcon(f), label: f))
-            .toList(),
       ),
     );
   }
 
-  // ── Add to Cart CTA ──────────────────────────────────────────
-  Widget _buildAddToCartButton() {
-    return Container(
-      height: 64,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.ctaGradientStart, AppColors.ctaGradientEnd],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(999),
-        boxShadow: AppShadows.raised,
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          // ── WIRED: adds product + selected size to CartService
-          onTap: _addToCart,
-          borderRadius: BorderRadius.circular(999),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              if (_isAddingToCart)
-                const SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.5,
-                    color: AppColors.onPrimaryContainer,
-                  ),
-                )
-              else ...[
-                const Icon(
-                  Icons.shopping_bag,
-                  color: AppColors.onPrimaryContainer,
-                  size: 24,
-                ),
-                const SizedBox(width: 12),
-                const Text(
-                  'Add to Cart',
-                  style: TextStyle(
-                    fontFamily: 'Inter',
-                    fontSize: 18,
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: -0.36,
-                    color: AppColors.onPrimaryContainer,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ── Feature icon helper ───────────────────────────────────────
-  IconData _featureIcon(String label) {
-    final l = label.toLowerCase();
-    if (l.contains('breath')) return Icons.air;
-    if (l.contains('water')) return Icons.water_drop_outlined;
-    if (l.contains('recycle')) return Icons.eco_outlined;
-    if (l.contains('light')) return Icons.bolt;
-    if (l.contains('grip')) return Icons.pan_tool_alt_outlined;
-    if (l.contains('foam')) return Icons.layers_outlined;
-    if (l.contains('organic')) return Icons.eco_outlined;
-    return Icons.verified_outlined;
+  IconData _categoryIcon(String cat) {
+    switch (cat) {
+      case 'SHOES': return Icons.directions_run;
+      case 'TECH': return Icons.devices;
+      case 'AUDIO': return Icons.headphones;
+      case 'CLOTHES': return Icons.checkroom;
+      case 'FITNESS': return Icons.fitness_center;
+      case 'LABEL': return Icons.local_offer;
+      default: return Icons.apps;
+    }
   }
 }
 
-// ── Loading state ─────────────────────────────────────────────
-class _LoadingState extends StatelessWidget {
-  const _LoadingState();
-  @override
-  Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.all(64),
-      child: Center(child: CircularProgressIndicator(color: AppColors.primary)),
-    );
-  }
-}
-
-// ── Error state ───────────────────────────────────────────────
-class _ErrorState extends StatelessWidget {
-  const _ErrorState();
-  @override
-  Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.all(48),
-      child: Center(
-        child: Text(
-          'Featured product not found.',
-          style: TextStyle(
-            fontFamily: 'Inter',
-            color: AppColors.onSurfaceVariant,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Feature item ─────────────────────────────────────────────
-class _FeatureItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  const _FeatureItem({required this.icon, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, color: AppColors.primary, size: 24),
-        const SizedBox(height: 8),
-        Text(
-          label,
-          style: const TextStyle(
-            fontFamily: 'Inter',
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
-            color: AppColors.onSurfaceVariant,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
+// ── Scroll behavior ───────────────────────────────────────────
 class _NoScrollbarBehavior extends ScrollBehavior {
   @override
   Widget buildScrollbar(

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_shadows.dart';
 import '../../core/utils/app_utils.dart';
@@ -16,11 +18,13 @@ class OrderHistoryScreen extends StatefulWidget {
 }
 
 class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
-  int  _navIndex  = 4;
-  bool _isLoading = true;
-  List<OrderModel> _orders         = [];
-  List<OrderModel> _filteredOrders = [];
+  int  _navIndex    = 4;
   bool _isSearching = false;
+
+  // Real-time Firestore stream — reflects admin status changes instantly
+  Stream<List<OrderModel>>? _ordersStream;
+  List<OrderModel> _allOrders      = [];
+  List<OrderModel> _filteredOrders = [];
 
   final _orderService    = OrderService();
   final _searchController = TextEditingController();
@@ -28,8 +32,22 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
   @override
   void initState() {
     super.initState();
-    _loadOrders();
     _searchController.addListener(_onSearchChanged);
+    _initStream();
+  }
+
+  void _initStream() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    _ordersStream = FirebaseFirestore.instance
+        .collection('orders')
+        .where('userId', isEqualTo: uid)
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snap) => snap.docs
+            .map((d) => OrderModel.fromJson({...d.data(), 'id': d.id}))
+            .toList());
   }
 
   @override
@@ -38,29 +56,28 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
     super.dispose();
   }
 
-  Future<void> _loadOrders() async {
-    final result = await _orderService.getOrders();
-    if (!mounted) return;
-    setState(() {
-      _isLoading = false;
-      if (result.success) {
-        _orders         = result.data ?? [];
-        _filteredOrders = _orders;
-      }
-    });
-  }
-
-  // ── E2: Live search ───────────────────────────────────────────
+  // ── Live search on streamed orders ────────────────────────────
   void _onSearchChanged() {
     final q = _searchController.text.toLowerCase().trim();
     setState(() {
       _filteredOrders = q.isEmpty
-          ? _orders
-          : _orders.where((o) =>
+          ? _allOrders
+          : _allOrders.where((o) =>
               o.id.toLowerCase().contains(q) ||
               o.productName.toLowerCase().contains(q) ||
               o.status.name.toLowerCase().contains(q)).toList();
     });
+  }
+
+  void _applyStream(List<OrderModel> orders) {
+    _allOrders = orders;
+    final q = _searchController.text.toLowerCase().trim();
+    _filteredOrders = q.isEmpty
+        ? _allOrders
+        : _allOrders.where((o) =>
+            o.id.toLowerCase().contains(q) ||
+            o.productName.toLowerCase().contains(q) ||
+            o.status.name.toLowerCase().contains(q)).toList();
   }
 
   void _handleBottomNavTap(int index) {
@@ -210,9 +227,17 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: ResponsiveLayout(
-        child: Stack(
-          children: [
-            CustomScrollView(
+        child: StreamBuilder<List<OrderModel>>(
+          stream: _ordersStream,
+          builder: (context, snapshot) {
+            if (snapshot.hasData) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted) setState(() => _applyStream(snapshot.data!));
+              });
+            }
+            return Stack(
+              children: [
+                CustomScrollView(
               scrollBehavior: _NoScrollbar(),
               slivers: [
                 const SliverToBoxAdapter(child: SizedBox(height: 72)),
@@ -253,7 +278,7 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
                               _searchController.clear();
                               setState(() {
                                 _isSearching    = false;
-                                _filteredOrders = _orders;
+                                _filteredOrders = _allOrders;
                               });
                             },
                             child: const Padding(
@@ -272,7 +297,8 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
                     delegate: SliverChildListDelegate([
                       _buildSectionHeader(),
                       const SizedBox(height: 32),
-                      if (_isLoading)
+                      if (snapshot.connectionState == ConnectionState.waiting &&
+                          _allOrders.isEmpty)
                         const Center(child: Padding(
                           padding: EdgeInsets.all(40),
                           child: CircularProgressIndicator(
@@ -300,6 +326,8 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
               child: BottomNav(
                   currentIndex: _navIndex, onTap: _handleBottomNavTap)),
           ],
+        );
+          },
         ),
       ),
     );
@@ -334,7 +362,7 @@ class _OrderHistoryScreenState extends State<OrderHistoryScreen> {
             _isSearching = !_isSearching;
             if (!_isSearching) {
               _searchController.clear();
-              _filteredOrders = _orders;
+              _filteredOrders = _allOrders;
             }
           }),
           child: Icon(
@@ -617,6 +645,10 @@ _StatusConfig _statusConfig(OrderStatus status) {
     case OrderStatus.processing:
       return _StatusConfig(label: 'Processing', textColor: AppColors.error,
           dotColor: AppColors.error, bgColor: const Color(0xFF93000A),
+          dotGlow: false);
+    case OrderStatus.cancelled:
+      return _StatusConfig(label: 'Cancelled', textColor: Colors.grey,
+          dotColor: Colors.grey, bgColor: const Color(0xFF2A2A2A),
           dotGlow: false);
   }
 }

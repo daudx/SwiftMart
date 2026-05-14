@@ -1,8 +1,5 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'package:image_picker/image_picker.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_shadows.dart';
 import '../../core/utils/responsive_layout.dart';
@@ -19,44 +16,46 @@ class AddProductScreen extends StatefulWidget {
 }
 
 class _AddProductScreenState extends State<AddProductScreen> {
-  final _formKey = GlobalKey<FormState>();
-  final _nameCtrl = TextEditingController();
-  final _priceCtrl = TextEditingController();
-  final _descCtrl = TextEditingController();
+  final _formKey    = GlobalKey<FormState>();
+  final _nameCtrl   = TextEditingController();
+  final _priceCtrl  = TextEditingController();
+  final _stockCtrl  = TextEditingController();
+  final _descCtrl   = TextEditingController();
   final _imgUrlCtrl = TextEditingController();
-  File? _imageFile;
-  String _selectedCategory = 'TECH';
-  bool _isLoading = false;
 
-  Future<void> _pickImage() async {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-    if (pickedFile != null) {
-      setState(() {
-        _imageFile = File(pickedFile.path);
-      });
-    }
-  }
+  String _selectedCategory = 'TECH';
+  bool   _isLoading        = false;
+
+  // Listener to rebuild image preview as user types
+  void _onUrlChanged() => setState(() {});
 
   @override
   void initState() {
     super.initState();
-    if (widget.productData != null) {
-      _nameCtrl.text = widget.productData!['name'] ?? '';
-      _priceCtrl.text = widget.productData!['price']?.toString() ?? '';
-      _descCtrl.text = widget.productData!['description'] ?? '';
-      _imgUrlCtrl.text = widget.productData!['imageUrl'] ?? '';
-      _selectedCategory = widget.productData!['categoryId'] ?? 'TECH';
-      if (!AppConstants.productCategories.contains(_selectedCategory)) {
-        _selectedCategory = AppConstants.productCategories[1];
-      }
+    _imgUrlCtrl.addListener(_onUrlChanged);
+
+    final d = widget.productData;
+    if (d != null) {
+      _nameCtrl.text  = d['name']?.toString()  ?? '';
+      _priceCtrl.text = d['price']?.toString()  ?? '';
+      _stockCtrl.text = d['stock']?.toString()  ?? '';
+      _descCtrl.text  = d['description']?.toString() ?? '';
+      _imgUrlCtrl.text = d['imageUrl']?.toString() ?? '';
+
+      // Support both 'category' and legacy 'categoryId'
+      final cat = d['category'] ?? d['categoryId'] ?? 'TECH';
+      _selectedCategory = AppConstants.productCategories.contains(cat.toString())
+          ? cat.toString()
+          : 'TECH';
     }
   }
 
   @override
   void dispose() {
+    _imgUrlCtrl.removeListener(_onUrlChanged);
     _nameCtrl.dispose();
     _priceCtrl.dispose();
+    _stockCtrl.dispose();
     _descCtrl.dispose();
     _imgUrlCtrl.dispose();
     super.dispose();
@@ -67,37 +66,26 @@ class _AddProductScreenState extends State<AddProductScreen> {
     setState(() => _isLoading = true);
 
     try {
-      if (_imageFile != null) {
-        final ref = FirebaseStorage.instance
-            .ref()
-            .child('product_images')
-            .child('${DateTime.now().millisecondsSinceEpoch}.jpg');
-        await ref.putFile(_imageFile!);
-        final url = await ref.getDownloadURL();
-        _imgUrlCtrl.text = url;
-      }
-
       final productData = {
-        'name': _nameCtrl.text.trim(),
-        'price': double.tryParse(_priceCtrl.text.trim()) ?? 0.0,
+        'name':        _nameCtrl.text.trim(),
+        'price':       double.tryParse(_priceCtrl.text.trim()) ?? 0.0,
+        'stock':       int.tryParse(_stockCtrl.text.trim()) ?? 0,
         'description': _descCtrl.text.trim(),
-        'imageUrl': _imgUrlCtrl.text.trim(),
-        'categoryId': _selectedCategory,
-        'rating': widget.productData?['rating'] ?? 5.0,
+        'imageUrl':    _imgUrlCtrl.text.trim(),
+        'category':    _selectedCategory,   // ← always use 'category'
+        'rating':      widget.productData?['rating'] ?? 4.5,
         'reviewsCount': widget.productData?['reviewsCount'] ?? 0,
-        'isFeatured': widget.productData?['isFeatured'] ?? false,
+        'isFeatured':  widget.productData?['isFeatured'] ?? false,
       };
 
       if (widget.productId == null) {
-        productData['id'] = FirebaseFirestore.instance
-            .collection('products')
-            .doc()
-            .id;
-        await FirebaseFirestore.instance
-            .collection('products')
-            .doc(productData['id'] as String)
-            .set(productData);
+        // CREATE — auto-generate ID and embed it in the document
+        final docRef = FirebaseFirestore.instance.collection('products').doc();
+        productData['id'] = docRef.id;
+        await docRef.set(productData);
       } else {
+        // UPDATE — merge so we don't lose extra fields
+        productData['id'] = widget.productId!;
         await FirebaseFirestore.instance
             .collection('products')
             .doc(widget.productId)
@@ -106,15 +94,21 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
       if (mounted) {
         Navigator.pop(context);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Product saved successfully!')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(widget.productId == null
+              ? 'Product added successfully!'
+              : 'Product updated successfully!'),
+          backgroundColor: AppColors.surfaceContainerHigh,
+          behavior: SnackBarBehavior.floating,
+        ));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error saving product: \$e')));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -131,12 +125,11 @@ class _AddProductScreenState extends State<AddProductScreen> {
         title: Text(
           isEditing ? 'Edit Product' : 'Add Product',
           style: const TextStyle(
-            color: AppColors.primary,
-            fontWeight: FontWeight.bold,
-          ),
+              color: AppColors.primary, fontWeight: FontWeight.bold),
         ),
         backgroundColor: AppColors.background,
         iconTheme: const IconThemeData(color: AppColors.primary),
+        elevation: 0,
       ),
       body: ResponsiveLayout(
         child: SingleChildScrollView(
@@ -146,70 +139,32 @@ class _AddProductScreenState extends State<AddProductScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _buildTextField(
-                  'Product Name',
-                  _nameCtrl,
-                  'Enter product name',
+                // ── Product Name ─────────────────────────────
+                _buildTextField('Product Name', _nameCtrl, 'e.g. Sonic Pro Over-Ear'),
+                const SizedBox(height: 16),
+
+                // ── Price + Stock row ───────────────────────
+                Row(
+                  children: [
+                    Expanded(
+                        child: _buildTextField('Price (\$)', _priceCtrl, '0.00',
+                            isNumber: true)),
+                    const SizedBox(width: 16),
+                    Expanded(
+                        child: _buildTextField('Stock (qty)', _stockCtrl, '0',
+                            isNumber: true, isRequired: false)),
+                  ],
                 ),
                 const SizedBox(height: 16),
-                _buildTextField('Price', _priceCtrl, '0.00', isNumber: true),
+
+                // ── Description ─────────────────────────────
+                _buildTextField('Description', _descCtrl,
+                    'Short product description…',
+                    maxLines: 3, isRequired: false),
                 const SizedBox(height: 16),
-                _buildTextField(
-                  'Description',
-                  _descCtrl,
-                  'Product description',
-                  maxLines: 3,
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'PRODUCT IMAGE',
-                  style: TextStyle(
-                    color: AppColors.onSurfaceVariant,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                GestureDetector(
-                  onTap: _pickImage,
-                  child: Container(
-                    height: 150,
-                    decoration: BoxDecoration(
-                      color: AppColors.surfaceContainerLow,
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: AppShadows.pressed,
-                    ),
-                    child: _imageFile != null
-                        ? ClipRRect(
-                            borderRadius: BorderRadius.circular(12),
-                            child: Image.file(_imageFile!, fit: BoxFit.cover, width: double.infinity),
-                          )
-                        : (_imgUrlCtrl.text.isNotEmpty
-                            ? ClipRRect(
-                                borderRadius: BorderRadius.circular(12),
-                                child: Image.network(_imgUrlCtrl.text, fit: BoxFit.cover, width: double.infinity),
-                              )
-                            : const Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.add_a_photo, color: AppColors.primary, size: 40),
-                                    SizedBox(height: 8),
-                                    Text('Tap to upload image', style: TextStyle(color: AppColors.onSurfaceVariant)),
-                                  ],
-                                ),
-                              )),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Category',
-                  style: TextStyle(
-                    color: AppColors.onSurfaceVariant,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+
+                // ── Category ────────────────────────────────
+                _buildLabel('Category'),
                 const SizedBox(height: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -223,48 +178,81 @@ class _AddProductScreenState extends State<AddProductScreen> {
                       dropdownColor: AppColors.surfaceContainerHigh,
                       value: _selectedCategory,
                       isExpanded: true,
-                      style: const TextStyle(color: AppColors.onSurface),
+                      style: const TextStyle(
+                          color: AppColors.onSurface, fontFamily: 'Inter'),
                       items: AppConstants.productCategories
                           .where((c) => c != 'ALL')
-                          .map(
-                            (c) => DropdownMenuItem(value: c, child: Text(c)),
-                          )
+                          .map((c) =>
+                              DropdownMenuItem(value: c, child: Text(c)))
                           .toList(),
                       onChanged: (val) {
-                        if (val != null)
-                          setState(() => _selectedCategory = val);
+                        if (val != null) setState(() => _selectedCategory = val);
                       },
                     ),
                   ),
                 ),
+                const SizedBox(height: 16),
+
+                // ── Image URL ───────────────────────────────
+                _buildTextField('Image URL', _imgUrlCtrl,
+                    'https://images.unsplash.com/…',
+                    isRequired: false),
+                const SizedBox(height: 12),
+
+                // ── Image preview ───────────────────────────
+                if (_imgUrlCtrl.text.isNotEmpty)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: SizedBox(
+                      height: 180,
+                      child: Image.network(
+                        _imgUrlCtrl.text,
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        loadingBuilder: (_, child, progress) =>
+                            progress == null
+                                ? child
+                                : const Center(
+                                    child: CircularProgressIndicator(
+                                        color: AppColors.primary)),
+                        errorBuilder: (_, __, ___) => Container(
+                          height: 60,
+                          color: AppColors.surfaceContainerLow,
+                          child: const Center(
+                              child: Text('⚠ Invalid image URL',
+                                  style: TextStyle(
+                                      color: AppColors.error))),
+                        ),
+                      ),
+                    ),
+                  ),
+
                 const SizedBox(height: 32),
+
+                // ── Save button ─────────────────────────────
                 ElevatedButton(
                   onPressed: _isLoading ? null : _saveProduct,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+                        borderRadius: BorderRadius.circular(12)),
                   ),
                   child: _isLoading
                       ? const SizedBox(
                           width: 20,
                           height: 20,
                           child: CircularProgressIndicator(
-                            color: AppColors.onPrimary,
-                            strokeWidth: 2,
-                          ),
-                        )
-                      : const Text(
-                          'Save Product',
-                          style: TextStyle(
-                            color: AppColors.onPrimary,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
+                              color: AppColors.onPrimary, strokeWidth: 2))
+                      : Text(
+                          isEditing ? 'Update Product' : 'Add Product',
+                          style: const TextStyle(
+                              color: AppColors.onPrimary,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16),
                         ),
                 ),
+                const SizedBox(height: 40),
               ],
             ),
           ),
@@ -273,24 +261,29 @@ class _AddProductScreenState extends State<AddProductScreen> {
     );
   }
 
+  // ── Helper widgets ───────────────────────────────────────────
+
+  Widget _buildLabel(String text) => Text(
+        text.toUpperCase(),
+        style: const TextStyle(
+            color: AppColors.onSurfaceVariant,
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 0.8),
+      );
+
   Widget _buildTextField(
     String label,
     TextEditingController controller,
     String hint, {
-    bool isNumber = false,
-    int maxLines = 1,
+    bool isNumber   = false,
+    bool isRequired = true,
+    int maxLines    = 1,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          label.toUpperCase(),
-          style: const TextStyle(
-            color: AppColors.onSurfaceVariant,
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+        _buildLabel(label),
         const SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -303,18 +296,25 @@ class _AddProductScreenState extends State<AddProductScreen> {
             controller: controller,
             keyboardType: isNumber
                 ? const TextInputType.numberWithOptions(decimal: true)
-                : TextInputType.text,
+                : maxLines > 1
+                    ? TextInputType.multiline
+                    : TextInputType.text,
             maxLines: maxLines,
-            style: const TextStyle(color: AppColors.onSurface),
+            style: const TextStyle(
+                color: AppColors.onSurface, fontFamily: 'Inter'),
             decoration: InputDecoration(
               hintText: hint,
-              hintStyle: const TextStyle(color: AppColors.outlineVariant),
+              hintStyle: const TextStyle(
+                  color: AppColors.outlineVariant, fontFamily: 'Inter'),
               border: InputBorder.none,
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(vertical: 10),
             ),
-            validator: (value) =>
-                value == null || value.trim().isEmpty ? 'Required' : null,
+            validator: isRequired
+                ? (value) => (value == null || value.trim().isEmpty)
+                    ? 'Required'
+                    : null
+                : null,
           ),
         ),
       ],

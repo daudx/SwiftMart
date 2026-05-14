@@ -53,27 +53,20 @@ class _SwiftBotScreenState extends State<SwiftBotScreen>
     _inputController.clear();
 
     setState(() {
-      _messages.add(
-        MessageModel(
-          role: MessageRole.user,
-          content: userText,
-          timestamp: DateTime.now(),
-        ),
-      );
       _isThinking = true;
     });
 
     _scrollToBottom();
 
+    // The service internally adds the user message to the history list
     final result = await _ai.sendMessage(userText);
 
     if (!mounted) return;
 
     setState(() {
       _isThinking = false;
-      if (result.success && result.data != null) {
-        _messages.add(result.data!);
-      } else {
+      // If failed, we add an error message (which service doesn't store in history)
+      if (!result.success) {
         _messages.add(
           MessageModel(
             role: MessageRole.error,
@@ -110,26 +103,112 @@ class _SwiftBotScreenState extends State<SwiftBotScreen>
           children: [
             _buildAppBar(),
             Expanded(
-              child: ListView.separated(
-                controller: _scrollController,
-                padding: const EdgeInsets.all(24),
-                itemCount: _messages.length + (_isThinking ? 1 : 0),
-                separatorBuilder: (_, __) => const SizedBox(height: 24),
-                itemBuilder: (context, index) {
-                  if (index == _messages.length && _isThinking) {
-                    return _buildThinkingIndicator();
-                  }
-                  final msg = _messages[index];
-                  if (msg.role == MessageRole.user) {
-                    return _buildUserMessage(msg);
-                  }
-                  return _buildBotMessage(msg);
-                },
+              child: Stack(
+                children: [
+                  ListView.separated(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.all(24),
+                    itemCount: _messages.length + (_isThinking ? 1 : 0),
+                    separatorBuilder: (_, __) => const SizedBox(height: 24),
+                    itemBuilder: (context, index) {
+                      if (index == _messages.length && _isThinking) {
+                        return _buildThinkingIndicator();
+                      }
+                      final msg = _messages[index];
+                      if (msg.role == MessageRole.user) {
+                        return _buildUserMessage(msg);
+                      }
+                      return _buildBotMessage(msg);
+                    },
+                  ),
+                  if (_messages.length <= 1 && !_isThinking)
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      child: _buildSuggestions(),
+                    ),
+                ],
               ),
             ),
             _buildInputArea(),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildSuggestions() {
+    final suggestions = [
+      'What are the hot products? 🔥',
+      'Recommend some running shoes 👟',
+      'Show latest tech deals ⌚',
+      'Fitness gear recommendations 🏋️',
+    ];
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            AppColors.background.withValues(alpha: 0),
+            AppColors.background.withValues(alpha: 0.9),
+          ],
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+            child: Text(
+              'QUICK ACTIONS',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.2,
+                color: AppColors.outlineVariant,
+              ),
+            ),
+          ),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Row(
+              children: suggestions.map((text) {
+                return Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: GestureDetector(
+                    onTap: () => _sendMessage(text),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceContainerHigh,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: AppColors.tertiary.withValues(alpha: 0.2),
+                        ),
+                        boxShadow: AppShadows.raisedSmall,
+                      ),
+                      child: Text(
+                        text,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: AppColors.onSurfaceVariant,
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -242,39 +321,101 @@ class _SwiftBotScreenState extends State<SwiftBotScreen>
   }
 
   Widget _buildBotMessage(MessageModel msg) {
-    bool isError = msg.role == MessageRole.error;
+    final isError = msg.role == MessageRole.error;
+    
+    // Parse suggestion tag
+    String content = msg.content;
+    String? suggestionTag;
+    final regExp = RegExp(r'\[SUGGEST_PRODUCTS:\s*(.*?)\]');
+    final match = regExp.firstMatch(content);
+    
+    if (match != null) {
+      suggestionTag = match.group(1);
+      content = content.replaceFirst(regExp, '').trim();
+    }
+
     return Align(
       alignment: Alignment.centerLeft,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.85,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: BoxDecoration(
+              color: isError
+                  ? Colors.redAccent.withValues(alpha: 0.1)
+                  : AppColors.surfaceContainerLowest,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(24),
+                topRight: Radius.circular(24),
+                bottomRight: Radius.circular(24),
+                bottomLeft: Radius.circular(4),
+              ),
+              border: Border.all(
+                color: isError
+                    ? Colors.redAccent
+                    : AppColors.outlineVariant.withValues(alpha: 0.3),
+                width: 1,
+              ),
+            ),
+            child: Text(
+              content,
+              style: TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 14,
+                color: isError ? Colors.redAccent : AppColors.onSurfaceVariant,
+                height: 1.5,
+              ),
+            ),
+          ),
+          if (suggestionTag != null) ...[
+            const SizedBox(height: 12),
+            _buildSuggestionButton(suggestionTag),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSuggestionButton(String keywords) {
+    return GestureDetector(
+      onTap: () {
+        Navigator.pushNamed(
+          context, 
+          AppRoutes.swiftBotSuggest,
+          arguments: keywords,
+        );
+      },
       child: Container(
-        constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.85,
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          color: isError
-              ? Colors.redAccent.withOpacity(0.1)
-              : AppColors.surfaceContainerLowest,
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(24),
-            topRight: Radius.circular(24),
-            bottomRight: Radius.circular(24),
-            bottomLeft: Radius.circular(4),
-          ),
-          border: Border.all(
-            color: isError
-                ? Colors.redAccent
-                : AppColors.outlineVariant.withOpacity(0.3),
-            width: 1,
-          ),
+          color: AppColors.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(999),
+          border: Border.all(color: AppColors.tertiary.withValues(alpha: 0.5)),
+          boxShadow: AppShadows.raisedSmall,
         ),
-        child: Text(
-          msg.content,
-          style: TextStyle(
-            fontFamily: 'Inter',
-            fontSize: 14,
-            color: isError ? Colors.redAccent : AppColors.onSurfaceVariant,
-            height: 1.5,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.shopping_bag_outlined, 
+              color: AppColors.tertiary, size: 16),
+            const SizedBox(width: 8),
+            Text(
+              'View Suggestions: $keywords',
+              style: const TextStyle(
+                fontFamily: 'Inter',
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: AppColors.tertiary,
+              ),
+            ),
+            const SizedBox(width: 4),
+            const Icon(Icons.chevron_right, 
+              color: AppColors.tertiary, size: 16),
+          ],
         ),
       ),
     );
@@ -289,7 +430,7 @@ class _SwiftBotScreenState extends State<SwiftBotScreen>
         decoration: BoxDecoration(
           color: AppColors.surfaceContainerLowest,
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: AppColors.outlineVariant.withOpacity(0.3)),
+          border: Border.all(color: AppColors.outlineVariant.withValues(alpha: 0.3)),
         ),
         child: const Center(
           child: SizedBox(

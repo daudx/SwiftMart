@@ -4,6 +4,7 @@ enum OrderStatus {
   delivered,
   shipped,
   processing,
+  cancelled,
 }
 
 /// A completed or in-progress order in the user's history.
@@ -54,18 +55,20 @@ class OrderModel {
     'productImageUrl':  productImageUrl,
     'price':            price,
     'date':             date,
-    'status':           status.name,  // "delivered" / "shipped" / "processing"
+    'status':           status.name, // "delivered" / "shipped" / "processing" / "cancelled"
   };
 
-  // ── fromJson ─────────────────────────────────────────────────
+  // ── fromJson — null-safe ──────────────────────────────────────
+  // Every field has a fallback so missing Firestore fields never throw.
   factory OrderModel.fromJson(Map<String, dynamic> json) => OrderModel(
-    id:               json['id']              as String,
-    productName:      json['productName']     as String,
-    productImageUrl:  json['productImageUrl'] as String,
-    price:            (json['price']          as num).toDouble(),
-    date:             json['date']            as String,
+    id:               json['id']?.toString()              ?? '',
+    productName:      json['productName']?.toString()     ?? 'Unknown Product',
+    productImageUrl:  json['productImageUrl']?.toString() ?? '',
+    price:            (json['price'] as num?)?.toDouble() ??
+                      (json['totalAmount'] as num?)?.toDouble() ?? 0.0,
+    date:             json['date']?.toString()            ?? 'N/A',
     status:           OrderStatus.values.firstWhere(
-                        (s) => s.name == json['status'],
+                        (s) => s.name == (json['status']?.toString() ?? ''),
                         orElse: () => OrderStatus.processing,
                       ),
   );

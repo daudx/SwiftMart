@@ -125,17 +125,46 @@ void initState() {
       decoration: const BoxDecoration(
         color: AppColors.background, boxShadow: AppShadows.raised),
       child: Row(children: [
-        GestureDetector(onTap: () {},
-            child: const Icon(Icons.menu, color: AppColors.primary, size: 26)),
+        const SizedBox(width: 8),
         const SizedBox(width: 16),
         const Text('SwiftMart',
           style: TextStyle(fontFamily: 'Inter', fontSize: 24,
               fontWeight: FontWeight.w900, letterSpacing: -0.96,
               color: AppColors.primary)),
         const Spacer(),
-        GestureDetector(onTap: () {},
-            child: const Icon(Icons.notifications_outlined,
-                color: AppColors.primary, size: 26)),
+        PopupMenuButton<String>(
+          icon: const Icon(Icons.more_vert, color: AppColors.primary, size: 26),
+          color: AppColors.surfaceContainerHigh,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          onSelected: (val) async {
+            if (val == 'clear') {
+              final confirm = await AppUtils.showConfirmDialog(
+                context,
+                title: 'Clear Cart',
+                body: 'Are you sure you want to remove all items?',
+                confirmLabel: 'Clear All',
+                isDestructive: true,
+              );
+              if (confirm == true) {
+                await _cart.clearCart();
+                if (mounted) setState(() {});
+                if (mounted) AppUtils.showSnackBar(context, 'Cart cleared! 🗑️');
+              }
+            }
+          },
+          itemBuilder: (ctx) => [
+            const PopupMenuItem(
+              value: 'clear',
+              child: Row(
+                children: [
+                  Icon(Icons.delete_sweep_outlined, color: AppColors.error, size: 20),
+                  SizedBox(width: 12),
+                  Text('Clear Cart', style: TextStyle(color: AppColors.error, fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+          ],
+        ),
       ]),
     );
   }

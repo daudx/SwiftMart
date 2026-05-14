@@ -1,3 +1,4 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_shadows.dart';
@@ -33,27 +34,6 @@ class _SwiftBotSuggestionsScreenState extends State<SwiftBotSuggestionsScreen> {
     _loadProducts();
   }
 
-  // Seed product data matching the UI
-  static const List<_SeedProduct> _seedProducts = [
-    _SeedProduct(
-      name: 'SwiftStep Pro Runner',
-      price: 89.99,
-      imageUrl:
-          'https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&q=80',
-    ),
-    _SeedProduct(
-      name: 'AeroMax Lite',
-      price: 74.99,
-      imageUrl:
-          'https://images.unsplash.com/photo-1606107557195-0e29a4b5b4aa?w=800&q=80',
-    ),
-    _SeedProduct(
-      name: 'TrailBlaze X',
-      price: 99.00,
-      imageUrl:
-          'https://images.unsplash.com/photo-1608231387042-66d1773070a5?w=800&q=80',
-    ),
-  ];
 
   static const List<String> _quickChips = [
     'View Details',
@@ -83,17 +63,36 @@ class _SwiftBotSuggestionsScreenState extends State<SwiftBotSuggestionsScreen> {
   }
 
   Future<void> _loadProducts() async {
-    final ids =
-        ModalRoute.of(context)?.settings.arguments as List<String>? ?? [];
+    final keywords = ModalRoute.of(context)?.settings.arguments as String? ?? '';
+    if (keywords.isEmpty) {
+      setState(() => _loadingProducts = false);
+      return;
+    }
 
-    final result = await _ai.getProductSuggestions(ids);
+    try {
+      // Simple search: check if name or category contains the keyword
+      final querySnapshot = await FirebaseFirestore.instance
+          .collection('products')
+          .get();
 
-    if (!mounted) return;
+      final List<ProductModel> results = querySnapshot.docs.where((doc) {
+        final data = doc.data();
+        final name = (data['name'] ?? '').toString().toLowerCase();
+        final cat = (data['category'] ?? '').toString().toLowerCase();
+        final key = keywords.toLowerCase();
+        return name.contains(key) || cat.contains(key);
+      }).map((doc) => ProductModel.fromJson(doc.data())).toList();
 
-    setState(() {
-      _products = result.data ?? [];
-      _loadingProducts = false;
-    });
+      if (!mounted) return;
+
+      setState(() {
+        _products = results;
+        _loadingProducts = false;
+      });
+    } catch (e) {
+      debugPrint('Error loading suggestions: $e');
+      if (mounted) setState(() => _loadingProducts = false);
+    }
   }
 
   // ── WIRED: nav handler properly navigates ─────────────────────
@@ -118,19 +117,13 @@ class _SwiftBotSuggestionsScreenState extends State<SwiftBotSuggestionsScreen> {
   }
 
   // ── WIRED: Add to Cart ────────────────────────────────────────
-  Future<void> _addToCart(_SeedProduct sp) async {
+  Future<void> _addToCart(ProductModel product) async {
     await _cart.addItem(
-      product: ProductModel(
-        id: 'seed_${sp.name.hashCode}',
-        name: sp.name,
-        category: 'SHOES',
-        price: sp.price,
-        imageUrl: sp.imageUrl,
-      ),
-      selectedSize: 'Default',
+      product: product,
+      selectedSize: product.category == 'SHOES' ? '9' : 'M',
     );
     if (!mounted) return;
-    AppUtils.showSnackBar(context, '${sp.name} added to cart! 🛍️');
+    AppUtils.showSnackBar(context, '${product.name} added to cart! 🛍️');
   }
 
   @override
@@ -307,22 +300,23 @@ class _SwiftBotSuggestionsScreenState extends State<SwiftBotSuggestionsScreen> {
 
   Widget _buildProductCardsRow() {
     if (_loadingProducts) {
-      return SizedBox(
+      return const SizedBox(
         height: 268,
-        child: const Center(child: CircularProgressIndicator()),
+        child: Center(child: CircularProgressIndicator()),
       );
     }
 
     if (_products.isEmpty) {
-      return SizedBox(
-        height: 268,
-        child: ListView.separated(
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.only(right: 16, bottom: 16),
-          physics: const ClampingScrollPhysics(),
-          itemCount: _seedProducts.length,
-          separatorBuilder: (_, _) => const SizedBox(width: 16),
-          itemBuilder: (_, i) => _buildProductCard(_seedProducts[i]),
+      return const SizedBox(
+        height: 100,
+        child: Center(
+          child: Text(
+            'No matching products found in our catalog.',
+            style: TextStyle(
+              color: AppColors.onSurfaceVariant,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
         ),
       );
     }
@@ -340,7 +334,8 @@ class _SwiftBotSuggestionsScreenState extends State<SwiftBotSuggestionsScreen> {
     );
   }
 
-  Widget _buildProductCard(_SeedProduct sp) {
+
+  Widget _buildRealProductCard(ProductModel product) {
     return Container(
       width: 256,
       padding: const EdgeInsets.all(16),
@@ -362,7 +357,7 @@ class _SwiftBotSuggestionsScreenState extends State<SwiftBotSuggestionsScreen> {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(12),
               child: Image.network(
-                sp.imageUrl,
+                product.imageUrl,
                 width: double.infinity,
                 height: 128,
                 fit: BoxFit.cover,
@@ -379,7 +374,9 @@ class _SwiftBotSuggestionsScreenState extends State<SwiftBotSuggestionsScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            sp.name,
+            product.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
               fontFamily: 'Inter',
               fontSize: 14,
@@ -389,7 +386,7 @@ class _SwiftBotSuggestionsScreenState extends State<SwiftBotSuggestionsScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            AppUtils.formatPrice(sp.price),
+            AppUtils.formatPrice(product.price),
             style: const TextStyle(
               fontFamily: 'Inter',
               fontSize: 18,
@@ -398,9 +395,8 @@ class _SwiftBotSuggestionsScreenState extends State<SwiftBotSuggestionsScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          // ── WIRED: Add to Cart ──────────────────────────
           GestureDetector(
-            onTap: () => _addToCart(sp),
+            onTap: () => _addToCart(product),
             child: Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 8),
@@ -423,23 +419,6 @@ class _SwiftBotSuggestionsScreenState extends State<SwiftBotSuggestionsScreen> {
               ),
             ),
           ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRealProductCard(ProductModel product) {
-    return Container(
-      width: 256,
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        children: [
-          Image.network(product.imageUrl, height: 120),
-          const SizedBox(height: 12),
-
-          Text(product.name),
-
-          Text('\$\${product.price}'),
         ],
       ),
     );
@@ -498,8 +477,8 @@ class _SwiftBotSuggestionsScreenState extends State<SwiftBotSuggestionsScreen> {
               onTap: () {
                 switch (label) {
                   case 'Add to Cart':
-                    if (_seedProducts.isNotEmpty) {
-                      _addToCart(_seedProducts.first);
+                    if (_products.isNotEmpty) {
+                      _addToCart(_products.first);
                     }
                   case 'Back to Search':
                     Navigator.pushReplacementNamed(context, AppRoutes.swiftBot);
@@ -619,15 +598,6 @@ class _SwiftBotSuggestionsScreenState extends State<SwiftBotSuggestionsScreen> {
   }
 }
 
-class _SeedProduct {
-  final String name, imageUrl;
-  final double price;
-  const _SeedProduct({
-    required this.name,
-    required this.price,
-    required this.imageUrl,
-  });
-}
 
 class _NoScrollbar extends ScrollBehavior {
   @override

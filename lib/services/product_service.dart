@@ -140,6 +140,33 @@ class ProductService {
     }
   }
 
+  // ── getProductStream ──────────────────────────────────────────
+  /// Returns a real-time stream for a single product.
+  Stream<ProductModel?> getProductStream(String id) {
+    return _productDoc(id).snapshots().asyncMap((doc) async {
+      if (!doc.exists || doc.data() == null) return null;
+      final p = ProductModel.fromJson({...doc.data()!, 'id': doc.id});
+      final merged = await _mergeFavourites([p]);
+      return merged.first;
+    });
+  }
+
+  // ── getProductsStream ─────────────────────────────────────────
+  /// Returns a real-time stream for all products or a specific category.
+  Stream<List<ProductModel>> getProductsStream({String category = 'ALL'}) {
+    Query<Map<String, dynamic>> query = _products.orderBy('name');
+    if (category != 'ALL') {
+      query = query.where('category', isEqualTo: category);
+    }
+
+    return query.snapshots().asyncMap((snap) async {
+      final raw = snap.docs
+          .map((d) => ProductModel.fromJson({...d.data(), 'id': d.id}))
+          .toList();
+      return await _mergeFavourites(raw);
+    });
+  }
+
   // ── searchProducts ────────────────────────────────────────────
   /// Client-side filter on cached/fetched products.
   /// For production with large catalogues: replace with Algolia

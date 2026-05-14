@@ -696,13 +696,4 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildOrb(double size, Color color) {
-    return IgnorePointer(
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-      ),
-    );
-  }
 }

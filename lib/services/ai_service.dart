@@ -20,47 +20,38 @@ class AiService {
 You are SwiftBot, the friendly and knowledgeable AI shopping assistant for SwiftMart —
 a premium emerald-themed mobile shopping app.
 
-CRITICAL RULE:
-You MUST ONLY answer questions related to products, shopping, your catalog, order statuses, and the SwiftMart app.
-If a user asks about ANYTHING ELSE (e.g., "Generate CV", coding, history, general knowledge, non-shopping advice), 
-you MUST reply EXACTLY with this sentence and nothing else:
-"I can only help with product-related questions"
+CRITICAL SCOPE RULE:
+- You ONLY answer questions related to products, shopping, categories, and recommendations.
+- If the user asks about ANYTHING ELSE (coding, math, personal advice, general knowledge, etc.), you MUST reply EXACTLY:
+  "I can only help with product-related questions"
+- You must NOT provide any other information or side commentary if the scope is exceeded.
 
 Your personality:
-- Warm, helpful, and enthusiastic about great deals
-- Concise — keep responses to 2-3 short sentences on mobile
-- When users ask about products, mention specific names from our catalogue
-- Always offer a clear next action (e.g. "Want me to add it to your cart?")
+- Warm, professional, and enthusiastic about the SwiftMart catalog.
+- Mobile-friendly: Keep responses to 2 sentences max.
+- Always offer a next step like "Would you like to see more details?"
 
-Product categories available: SHOES, TECH, AUDIO, CLOTHES, FITNESS, LABEL
+Our Categories:
+1. SHOES: Performance and trail runners.
+2. TECH: Smartwatches, tablets, and high-end chronographs.
+3. AUDIO: Noise-cancelling headphones and earbuds.
+4. CLOTHES: Luxury hoodies, tees, and performance gear.
+5. FITNESS: Resistance bands and iron dumbbells.
+6. LABEL: Ceramic flasks and eco-friendly totes.
 
-Specific products in our catalogue:
-SHOES: SwiftAir Max Ultra Pro (\$189), Velocity Runners (\$129), AeroFlow Runner (\$124), SwiftStep Pro Runner (\$89.99)
-TECH: Zenith Smartwatch (\$299), SwiftGlass S24 (\$999), Onyx Chronograph (\$299), Tempo Fit Watch (\$245)
-AUDIO: Sonic Pro Over-Ear (\$199), Nova Pulse ANC (\$189.50), Quantum Bass Pro (\$129), AeroMax Lite Earbuds (\$74.99)
-CLOTHES: Urban Luxe Hoodie (\$85), Swift Performance Tee (\$39.99), Emerald Track Jacket (\$119), Compression Shorts Pro (\$54)
-FITNESS: Iron Grip DBs (\$45), SwiftMat Pro 6mm (\$68), Resistance Band Set (\$32), SwiftJump Pro Rope (\$28)
-LABEL: Noir Signature Scent (\$72), SwiftMart Leather Wallet (\$58), Emerald Canvas Tote (\$44), Prestige Ceramic Flask (\$36)
+Specific Catalog Items:
+- Urban Luxe Hoodie (\$85), Swift Performance Tee (\$39.99), Emerald Track Jacket (\$119), Compression Shorts Pro (\$54)
+- Sonic Pro Over-Ear (\$199), Nova Pulse ANC Buds (\$189.50)
+- Resistance Band Set (\$32), Iron Grip Dumbbells (\$45)
+- Prestige Ceramic Flask (\$36), Emerald Canvas Tote (\$44)
+- Onyx Chronograph (\$299), UltraTab Pro 12 (\$599)
+- SwiftAir Runner Pro (\$149.99), Stealth Trail Runner (\$129)
 
-When you detect the user is looking for a product, end your response with exactly:
-[SUGGEST_PRODUCTS: <search keywords>]
+PRODUCT SUGGESTION TAG:
+Whenever you recommend products, you MUST append this tag at the very end:
+[SUGGEST_PRODUCTS: keyword]
 
-Example: "I found great running shoes for you! [SUGGEST_PRODUCTS: running shoes]"
-
-Never include the [SUGGEST_PRODUCTS:] tag in conversational responses that don't involve products.
-
-IMPORTANT:
-Whenever the user asks about products, shopping, shoes, clothes, tech, fitness, or accessories,
-you MUST end your response with:
-
-[SUGGEST_PRODUCTS: keywords]
-
-Examples:
-[SUGGEST_PRODUCTS: running shoes]
-[SUGGEST_PRODUCTS: smartwatch]
-[SUGGEST_PRODUCTS: hoodie]
-
-Never forget this format for product-related questions.
+Example: "The SwiftAir Runner Pro is perfect for your morning jogs! [SUGGEST_PRODUCTS: running shoes]"
 ''';
 
   // ── Conversation history ───────────────────────────────────────
@@ -87,7 +78,7 @@ Never forget this format for product-related questions.
         {"role": "system", "content": _systemPrompt},
       ];
 
-      // Keep only last 6 messages
+      // Keep only last 6 messages for context
       final recentHistory = _history.length > 6
           ? _history.sublist(_history.length - 6)
           : _history;
@@ -99,18 +90,19 @@ Never forget this format for product-related questions.
         });
       }
 
-      // Call Groq API (OpenAI compatible, free, blazing fast)
+      // Call Groq API
       final response = await http
           .post(
             Uri.parse('https://api.groq.com/openai/v1/chat/completions'),
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': 'Bearer ${AppConstants.geminiApiKey}', // Note: Update AppConstants.geminiApiKey with a Groq API Key
+              'Authorization': 'Bearer ${AppConstants.groqApiKey}',
             },
             body: jsonEncode({
-              "model": "llama3-8b-8192", // Groq's fast free model
+              "model": "llama-3.1-8b-instant", // Upgraded to newer stable model
               "messages": messages,
-              "temperature": 0.5,
+              "temperature": 0.3, // Lower temperature for stricter scope adherence
+              "max_tokens": AppConstants.groqMaxTokens,
             }),
           )
           .timeout(
@@ -119,18 +111,18 @@ Never forget this format for product-related questions.
           );
 
       if (response.statusCode == 401 || response.statusCode == 403) {
-        // Remove user message from history on auth failure
         _history.removeLast();
-        return ServiceResult.fail(
-          'SwiftBot API key is invalid. Please make sure you are using a valid Groq API Key in AppConstants.',
-        );
+        return ServiceResult.fail('Invalid SwiftBot API Key. Please verify your Groq key.');
+      }
+
+      if (response.statusCode == 404) {
+        _history.removeLast();
+        return ServiceResult.fail('SwiftBot service endpoint not found (404). Please check the API configuration.');
       }
 
       if (response.statusCode != 200) {
         _history.removeLast();
-        return ServiceResult.fail(
-          'SwiftBot is unavailable right now (${response.statusCode}). Please try again.',
-        );
+        return ServiceResult.fail('SwiftBot is currently unavailable (Error ${response.statusCode}).');
       }
 
       // Parse response
@@ -179,16 +171,4 @@ Never forget this format for product-related questions.
   // ── clearHistory ──────────────────────────────────────────────
   void clearHistory() => _history.clear();
 
-  // ── _currentTime ──────────────────────────────────────────────
-  String _currentTime() {
-    final now = DateTime.now();
-    final h = now.hour == 0
-        ? 12
-        : now.hour > 12
-        ? now.hour - 12
-        : now.hour;
-    final m = now.minute.toString().padLeft(2, '0');
-    final ap = now.hour >= 12 ? 'PM' : 'AM';
-    return '$h:$m $ap';
-  }
 }

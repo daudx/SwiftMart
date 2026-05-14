@@ -27,6 +27,7 @@ class ProductModel {
 
   // ── User state ────────────────────────────────────────────────
   final bool isFavourite;
+  final bool isFeatured;
 
   const ProductModel({
     required this.id,
@@ -42,6 +43,7 @@ class ProductModel {
     this.features = const [],
     this.stock = 0,
     this.isFavourite = false,
+    this.isFeatured = false,
   });
 
   // ── copyWith ─────────────────────────────────────────────────
@@ -59,6 +61,7 @@ class ProductModel {
     List<String>? features,
     int? stock,
     bool? isFavourite,
+    bool? isFeatured,
   }) {
     return ProductModel(
       id: id ?? this.id,
@@ -74,6 +77,7 @@ class ProductModel {
       features: features ?? this.features,
       stock: stock ?? this.stock,
       isFavourite: isFavourite ?? this.isFavourite,
+      isFeatured: isFeatured ?? this.isFeatured,
     );
   }
 
@@ -92,6 +96,7 @@ class ProductModel {
     'features': features,
     'stock': stock,
     'isFavourite': isFavourite,
+    'isFeatured': isFeatured,
   };
 
   // ── fromJson ─────────────────────────────────────────────────
@@ -119,6 +124,7 @@ class ProductModel {
         [],
     stock: int.tryParse(json['stock']?.toString() ?? '0') ?? 0,
     isFavourite: json['isFavourite'] == true || json['isFavourite'] == 'true',
+    isFeatured: json['isFeatured'] == true || json['isFeatured'] == 'true',
   );
 
   // ── Seed product — matches home_screen UI exactly ─────────────

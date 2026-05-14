@@ -145,15 +145,27 @@ class _ProductScreenState extends State<ProductScreen> {
       body: Stack(
         children: [
           // ── Scrollable content ──────────────────────────
-          CustomScrollView(
-            controller: _scrollController,
-            scrollBehavior: _NoScrollbar(),
-            slivers: [
-              const SliverToBoxAdapter(child: SizedBox(height: 80)),
-              SliverToBoxAdapter(child: _buildHeroSection(p)),
-              SliverToBoxAdapter(child: _buildInfoSection(p)),
-              const SliverToBoxAdapter(child: SizedBox(height: 200)),
-            ],
+          StreamBuilder<ProductModel?>(
+            stream: _product.getProductStream(_p!.id),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting && _p == null) {
+                return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+              }
+
+              final p = snapshot.data ?? _p!;
+              _p = p; // Keep local ref updated
+
+              return CustomScrollView(
+                controller: _scrollController,
+                scrollBehavior: _NoScrollbar(),
+                slivers: [
+                  const SliverToBoxAdapter(child: SizedBox(height: 80)),
+                  SliverToBoxAdapter(child: _buildHeroSection(p)),
+                  SliverToBoxAdapter(child: _buildInfoSection(p)),
+                  const SliverToBoxAdapter(child: SizedBox(height: 200)),
+                ],
+              );
+            },
           ),
 
           // ── Sticky AppBar ────────────────────────────────
@@ -377,7 +389,7 @@ class _ProductScreenState extends State<ProductScreen> {
           _buildOverviewCard(p),
           const SizedBox(height: 32),
           _buildSpecGrid(p),
-          if (p.sizes.isNotEmpty && p.sizes.first != 'One Size') ...[
+          if (p.category == 'SHOES' && p.sizes.isNotEmpty && p.sizes.first != 'One Size') ...[
             const SizedBox(height: 40),
             _buildSizeSelector(p),
           ],

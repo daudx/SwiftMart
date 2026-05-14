@@ -21,7 +21,8 @@ import '../../core/utils/responsive_layout.dart';
 /// Firebase-ready: replace _loadProducts() body with a Firestore
 /// stream so the grid updates live when products change in the DB.
 class ShopScreen extends StatefulWidget {
-  const ShopScreen({super.key});
+  final String? initialCategory;
+  const ShopScreen({super.key, this.initialCategory});
 
   @override
   State<ShopScreen> createState() => _ShopScreenState();
@@ -29,7 +30,7 @@ class ShopScreen extends StatefulWidget {
 
 class _ShopScreenState extends State<ShopScreen> {
   int _navIndex = 5; // SHOP tab
-  String _selectedCategory = 'ALL';
+  late String _selectedCategory;
   bool _isLoading = true;
 
   List<ProductModel> _allProducts = [];
@@ -43,6 +44,7 @@ class _ShopScreenState extends State<ShopScreen> {
   @override
   void initState() {
     super.initState();
+    _selectedCategory = widget.initialCategory ?? 'ALL';
     _loadProducts();
     _searchController.addListener(_onSearchChanged);
   }
@@ -163,11 +165,36 @@ class _ShopScreenState extends State<ShopScreen> {
                 ),
 
                 // ── Product grid ────────────────────────────
-                _isLoading
-                    ? const SliverToBoxAdapter(child: _LoadingGrid())
-                    : _filteredProducts.isEmpty
-                    ? const SliverToBoxAdapter(child: _EmptyState())
-                    : _buildProductGrid(),
+                StreamBuilder<List<ProductModel>>(
+                  stream: _productService.getProductsStream(category: _selectedCategory),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting && _isLoading) {
+                      return const SliverToBoxAdapter(child: _LoadingGrid());
+                    }
+                    
+                    if (snapshot.hasError) {
+                      return const SliverToBoxAdapter(child: _EmptyState());
+                    }
+
+                    _allProducts = snapshot.data ?? [];
+                    _isLoading = false;
+
+                    // Apply search filter locally
+                    final query = _searchController.text.toLowerCase().trim();
+                    _filteredProducts = query.isEmpty
+                        ? _allProducts
+                        : _allProducts.where((p) =>
+                            p.name.toLowerCase().contains(query) ||
+                            p.category.toLowerCase().contains(query) ||
+                            p.description.toLowerCase().contains(query)).toList();
+
+                    if (_filteredProducts.isEmpty) {
+                      return const SliverToBoxAdapter(child: _EmptyState());
+                    }
+
+                    return _buildProductGrid();
+                  },
+                ),
 
                 const SliverToBoxAdapter(child: SizedBox(height: 120)),
               ],

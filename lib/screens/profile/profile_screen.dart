@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_shadows.dart';
 import '../../core/utils/app_utils.dart';
@@ -17,8 +19,47 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   int _navIndex = 4;
+  int _liveOrdersCount = 0;
+  int _liveWishlistCount = 0;
 
   UserModel get _user => AuthService().currentUser ?? UserModel.seed;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLiveCounts();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Refresh counts every time screen becomes visible
+    _loadLiveCounts();
+  }
+
+  Future<void> _loadLiveCounts() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    try {
+      final ordersSnap = await FirebaseFirestore.instance
+          .collection('orders')
+          .where('userId', isEqualTo: uid)
+          .get();
+      final wishlistSnap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('favourites')
+          .get();
+      if (mounted) {
+        setState(() {
+          _liveOrdersCount = ordersSnap.docs.length;
+          _liveWishlistCount = wishlistSnap.docs.length;
+        });
+      }
+    } catch (e) {
+      debugPrint('Profile counts error: $e');
+    }
+  }
 
   void _handleBottomNavTap(int index) {
     if (index == _navIndex) return;
@@ -632,11 +673,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          _buildStat('${_user.ordersCount}', 'ORDERS'),
+          _buildStat('$_liveOrdersCount', 'ORDERS'),
           _buildStatDivider(),
-          _buildStat('${_user.wishlistCount}', 'WISHLIST'),
-          _buildStatDivider(),
-          _buildStat('${_user.reviewsCount}', 'REVIEWS'),
+          _buildStat('$_liveWishlistCount', 'WISHLIST'),
         ],
       ),
     );
@@ -684,37 +723,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
   );
 
   Widget _buildSectionHeader() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        const Text(
-          'Account Settings',
-          style: TextStyle(
-            fontFamily: 'Inter',
-            fontSize: 18,
-            fontWeight: FontWeight.w800,
-            letterSpacing: -0.36,
-            color: AppColors.textMain,
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceContainerHigh,
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: const Text(
-            'v2.4.0',
-            style: TextStyle(
-              fontFamily: 'Inter',
-              fontSize: 12,
-              fontWeight: FontWeight.w500,
-              color: AppColors.onSurfaceVariant,
-            ),
-          ),
-        ),
-      ],
+    return const Text(
+      'Account Settings',
+      style: TextStyle(
+        fontFamily: 'Inter',
+        fontSize: 18,
+        fontWeight: FontWeight.w800,
+        letterSpacing: -0.36,
+        color: AppColors.textMain,
+      ),
     );
   }
 
