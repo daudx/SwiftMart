@@ -3,25 +3,17 @@ import '../../core/constants/app_constant.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_shadows.dart';
 import '../../core/utils/app_utils.dart';
+import '../../core/utils/responsive_layout.dart';
 import '../../models/product_model.dart';
 import '../../routes/app_routes.dart';
 import '../../services/cart_service.dart';
 import '../../services/product_service.dart';
 import '../../widgets/bottom_nav.dart';
-import '../../core/utils/responsive_layout.dart';
 
 /// Product catalogue / shop listing screen.
-///
-/// Features:
-///   - Category filter chips (ALL + 6 categories)
-///   - Live search with real-time filtering
-///   - 2-column product grid
-///   - Each card taps to ProductScreen, Add to Cart taps CartService
-///
-/// Firebase-ready: replace _loadProducts() body with a Firestore
-/// stream so the grid updates live when products change in the DB.
 class ShopScreen extends StatefulWidget {
   final String? initialCategory;
+
   const ShopScreen({super.key, this.initialCategory});
 
   @override
@@ -29,87 +21,114 @@ class ShopScreen extends StatefulWidget {
 }
 
 class _ShopScreenState extends State<ShopScreen> {
-  int _navIndex = 5; // SHOP tab
+  final ProductService _productService = ProductService();
+  final CartService _cartService = CartService();
+  final ScrollController _scrollController = ScrollController();
+  final TextEditingController _searchController = TextEditingController();
+
+  int _navIndex = 5;
   late String _selectedCategory;
   bool _isLoading = true;
-
   List<ProductModel> _allProducts = [];
   List<ProductModel> _filteredProducts = [];
-
-  final _searchController = TextEditingController();
-  final _scrollController = ScrollController();
-  final _productService = ProductService();
-  final _cartService = CartService();
 
   @override
   void initState() {
     super.initState();
     _selectedCategory = widget.initialCategory ?? 'ALL';
-    _loadProducts();
-    _searchController.addListener(_onSearchChanged);
+    _searchController.addListener(_applyFilters);
   }
 
   @override
   void dispose() {
-    _searchController.dispose();
     _scrollController.dispose();
+    _searchController.removeListener(_applyFilters);
+    _searchController.dispose();
     super.dispose();
   }
 
-  // ── Data loading ─────────────────────────────────────────────
-  Future<void> _loadProducts() async {
-    setState(() => _isLoading = true);
-    final result = await _productService.getAllProducts();
-    if (!mounted) return;
-    setState(() {
-      _isLoading = false;
-      if (result.success) {
-        _allProducts = result.data ?? [];
-        _filteredProducts = _allProducts;
-      }
-    });
-  }
+  @override
+  Widget build(BuildContext context) {
+    final content = ResponsiveLayout(
+      child: Stack(
+        children: [
+          CustomScrollView(
+            controller: _scrollController,
+            slivers: [
+              const SliverToBoxAdapter(child: SizedBox(height: 80)),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+                  child: _buildSearchBar(),
+                ),
+              ),
+              SliverToBoxAdapter(child: _buildCategoryChips()),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+                  child: _buildResultsHeader(),
+                ),
+              ),
+              StreamBuilder<List<ProductModel>>(
+                // Always stream the full catalogue and perform category
+                // filtering client-side. This avoids mismatches between
+                // Firestore category values and our chip constants.
+                stream: _productService.getProductsStream(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting &&
+                      _isLoading) {
+                    return const SliverToBoxAdapter(child: _LoadingGrid());
+                  }
 
-  // ── Filtering ─────────────────────────────────────────────────
-  void _onCategorySelected(String category) {
-    setState(() => _selectedCategory = category);
-    _applyFilters();
-  }
+                  if (snapshot.hasError) {
+                    return const SliverToBoxAdapter(child: _EmptyState());
+                  }
 
-  void _onSearchChanged() => _applyFilters();
+                  _allProducts = snapshot.data ?? [];
+                  _isLoading = false;
+                  _filteredProducts = _filterProducts(_allProducts);
 
-  void _applyFilters() {
-    final query = _searchController.text.toLowerCase().trim();
-    List<ProductModel> base = _allProducts;
+                  if (_filteredProducts.isEmpty) {
+                    return const SliverToBoxAdapter(child: _EmptyState());
+                  }
 
-    // Category filter
-    if (_selectedCategory != 'ALL') {
-      base = base.where((p) => p.category == _selectedCategory).toList();
-    }
-
-    // Search filter
-    if (query.isNotEmpty) {
-      base = base
-          .where(
-            (p) =>
-                p.name.toLowerCase().contains(query) ||
-                p.category.toLowerCase().contains(query) ||
-                p.description.toLowerCase().contains(query),
-          )
-          .toList();
-    }
-
-    setState(() => _filteredProducts = base);
-  }
-
-  // ── Cart ──────────────────────────────────────────────────────
-  Future<void> _addToCart(ProductModel p) async {
-    await _cartService.addItem(
-      product: p,
-      selectedSize: p.sizes.isNotEmpty ? p.sizes.first : 'One Size',
+                  return _buildProductGrid();
+                },
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 120)),
+            ],
+          ),
+          Positioned(top: 0, left: 0, right: 0, child: _buildAppBar()),
+        ],
+      ),
     );
-    if (!mounted) return;
-    AppUtils.showSnackBar(context, '${p.name} added to cart! 🛍️');
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobile = constraints.maxWidth < 600;
+
+        if (isMobile) {
+          return Scaffold(
+            backgroundColor: AppColors.background,
+            body: content,
+            bottomNavigationBar: BottomNav(
+              currentIndex: _navIndex,
+              onTap: _handleNavTap,
+            ),
+          );
+        }
+
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          body: Row(
+            children: [
+              BottomNav(currentIndex: _navIndex, onTap: _handleNavTap),
+              Expanded(child: content),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   void _handleNavTap(int index) {
@@ -132,89 +151,30 @@ class _ShopScreenState extends State<ShopScreen> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: ResponsiveLayout(
-        child: Stack(
-          children: [
-            CustomScrollView(
-              controller: _scrollController,
-              scrollBehavior: _NoScrollbar(),
-              slivers: [
-                const SliverToBoxAdapter(child: SizedBox(height: 80)),
-
-                // ── Search bar ──────────────────────────────
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
-                    child: _buildSearchBar(),
-                  ),
-                ),
-
-                // ── Category chips ──────────────────────────
-                SliverToBoxAdapter(child: _buildCategoryChips()),
-
-                // ── Results header ──────────────────────────
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
-                    child: _buildResultsHeader(),
-                  ),
-                ),
-
-                // ── Product grid ────────────────────────────
-                StreamBuilder<List<ProductModel>>(
-                  stream: _productService.getProductsStream(category: _selectedCategory),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting && _isLoading) {
-                      return const SliverToBoxAdapter(child: _LoadingGrid());
-                    }
-                    
-                    if (snapshot.hasError) {
-                      return const SliverToBoxAdapter(child: _EmptyState());
-                    }
-
-                    _allProducts = snapshot.data ?? [];
-                    _isLoading = false;
-
-                    // Apply search filter locally
-                    final query = _searchController.text.toLowerCase().trim();
-                    _filteredProducts = query.isEmpty
-                        ? _allProducts
-                        : _allProducts.where((p) =>
-                            p.name.toLowerCase().contains(query) ||
-                            p.category.toLowerCase().contains(query) ||
-                            p.description.toLowerCase().contains(query)).toList();
-
-                    if (_filteredProducts.isEmpty) {
-                      return const SliverToBoxAdapter(child: _EmptyState());
-                    }
-
-                    return _buildProductGrid();
-                  },
-                ),
-
-                const SliverToBoxAdapter(child: SizedBox(height: 120)),
-              ],
-            ),
-
-            Positioned(top: 0, left: 0, right: 0, child: _buildAppBar()),
-
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: BottomNav(currentIndex: _navIndex, onTap: _handleNavTap),
-            ),
-          ],
-        ),
-      ),
-    );
+  void _applyFilters() {
+    if (!mounted) return;
+    setState(() {
+      _filteredProducts = _filterProducts(_allProducts);
+    });
   }
 
-  // ── AppBar ───────────────────────────────────────────────────
+  List<ProductModel> _filterProducts(List<ProductModel> source) {
+    final query = _searchController.text.toLowerCase().trim();
+    return source.where((p) {
+      final matchesCategory =
+          _selectedCategory == 'ALL' ||
+          p.category.toUpperCase() == _selectedCategory;
+
+      final matchesQuery =
+          query.isEmpty ||
+          p.name.toLowerCase().contains(query) ||
+          p.category.toLowerCase().contains(query) ||
+          p.description.toLowerCase().contains(query);
+
+      return matchesCategory && matchesQuery;
+    }).toList();
+  }
+
   Widget _buildAppBar() {
     return Container(
       padding: EdgeInsets.fromLTRB(
@@ -240,7 +200,6 @@ class _ShopScreenState extends State<ShopScreen> {
             ),
           ),
           const Spacer(),
-          // Cart icon with badge
           GestureDetector(
             onTap: () => Navigator.pushNamed(context, AppRoutes.cart),
             child: Stack(
@@ -282,7 +241,6 @@ class _ShopScreenState extends State<ShopScreen> {
     );
   }
 
-  // ── Search bar ───────────────────────────────────────────────
   Widget _buildSearchBar() {
     return Container(
       decoration: BoxDecoration(
@@ -344,7 +302,6 @@ class _ShopScreenState extends State<ShopScreen> {
     );
   }
 
-  // ── Category chips ───────────────────────────────────────────
   Widget _buildCategoryChips() {
     return SizedBox(
       height: 72,
@@ -406,7 +363,6 @@ class _ShopScreenState extends State<ShopScreen> {
     );
   }
 
-  // ── Results header ───────────────────────────────────────────
   Widget _buildResultsHeader() {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -443,26 +399,37 @@ class _ShopScreenState extends State<ShopScreen> {
     );
   }
 
-  // ── Product grid ─────────────────────────────────────────────
   Widget _buildProductGrid() {
-    return SliverPadding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
-      sliver: SliverGrid(
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
-          childAspectRatio: 0.65,
-        ),
-        delegate: SliverChildBuilderDelegate(
-          (_, i) => _buildProductCard(_filteredProducts[i]),
-          childCount: _filteredProducts.length,
-        ),
-      ),
+    return SliverLayoutBuilder(
+      builder: (context, constraints) {
+        final width = constraints.crossAxisExtent;
+        final crossAxisCount = width >= 1400
+            ? 5
+            : width >= 1100
+            ? 4
+            : width >= 750
+            ? 3
+            : 2;
+
+        return SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          sliver: SliverGrid(
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: crossAxisCount,
+              crossAxisSpacing: 16,
+              mainAxisSpacing: 16,
+              childAspectRatio: crossAxisCount >= 4 ? 0.72 : 0.65,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (_, i) => _buildProductCard(_filteredProducts[i]),
+              childCount: _filteredProducts.length,
+            ),
+          ),
+        );
+      },
     );
   }
 
-  // ── Single product card ──────────────────────────────────────
   Widget _buildProductCard(ProductModel p) {
     return GestureDetector(
       onTap: () =>
@@ -477,7 +444,6 @@ class _ShopScreenState extends State<ShopScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Image
             Expanded(
               flex: 5,
               child: ClipRRect(
@@ -501,8 +467,6 @@ class _ShopScreenState extends State<ShopScreen> {
                 ),
               ),
             ),
-
-            // Info
             Expanded(
               flex: 4,
               child: Padding(
@@ -514,7 +478,6 @@ class _ShopScreenState extends State<ShopScreen> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        // Category badge
                         Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 7,
@@ -536,7 +499,6 @@ class _ShopScreenState extends State<ShopScreen> {
                           ),
                         ),
                         const SizedBox(height: 5),
-                        // Name
                         Text(
                           AppUtils.truncate(p.name, 24),
                           style: const TextStyle(
@@ -549,8 +511,6 @@ class _ShopScreenState extends State<ShopScreen> {
                         ),
                       ],
                     ),
-
-                    // Price + Add to Cart
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       crossAxisAlignment: CrossAxisAlignment.center,
@@ -592,7 +552,6 @@ class _ShopScreenState extends State<ShopScreen> {
     );
   }
 
-  // ── Category icon map ────────────────────────────────────────
   IconData _categoryIcon(String cat) {
     switch (cat) {
       case 'SHOES':
@@ -611,11 +570,42 @@ class _ShopScreenState extends State<ShopScreen> {
         return Icons.apps;
     }
   }
+
+  void _onCategorySelected(String category) {
+    if (_selectedCategory == category) return;
+    setState(() {
+      _selectedCategory = category;
+      _isLoading = true;
+    });
+    // Re-apply filters on the current cached list so UI updates immediately.
+    _applyFilters();
+  }
+
+  Future<void> _addToCart(ProductModel product) async {
+    final result = await _cartService.addItem(
+      product: product,
+      selectedSize: product.sizes.isNotEmpty ? product.sizes.first : 'One Size',
+    );
+
+    if (!mounted) return;
+
+    if (!result.success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.error ?? 'Unable to add to cart.')),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text('${product.name} added to cart')));
+    setState(() {});
+  }
 }
 
-// ── Loading state ─────────────────────────────────────────────
 class _LoadingGrid extends StatelessWidget {
   const _LoadingGrid();
+
   @override
   Widget build(BuildContext context) {
     return const Padding(
@@ -625,9 +615,9 @@ class _LoadingGrid extends StatelessWidget {
   }
 }
 
-// ── Empty state ───────────────────────────────────────────────
 class _EmptyState extends StatelessWidget {
   const _EmptyState();
+
   @override
   Widget build(BuildContext context) {
     return Padding(
@@ -665,13 +655,4 @@ class _EmptyState extends StatelessWidget {
       ),
     );
   }
-}
-
-class _NoScrollbar extends ScrollBehavior {
-  @override
-  Widget buildScrollbar(
-    BuildContext context,
-    Widget child,
-    ScrollableDetails details,
-  ) => child;
 }

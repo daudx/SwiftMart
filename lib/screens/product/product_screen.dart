@@ -8,6 +8,7 @@ import '../../services/cart_service.dart';
 import '../../services/product_service.dart';
 import '../../widgets/bottom_nav.dart';
 import '../../widgets/neumorphic_container.dart';
+import '../../core/utils/responsive_layout.dart';
 
 /// Full product detail screen.
 ///
@@ -139,17 +140,21 @@ class _ProductScreenState extends State<ProductScreen> {
     }
 
     final p = _p!;
+    final isMobile = MediaQuery.of(context).size.width < 600;
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: Stack(
+    final content = ResponsiveLayout(
+      maxWidth: 1400,
+      child: Stack(
         children: [
           // ── Scrollable content ──────────────────────────
           StreamBuilder<ProductModel?>(
             stream: _product.getProductStream(_p!.id),
             builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting && _p == null) {
-                return const Center(child: CircularProgressIndicator(color: AppColors.primary));
+              if (snapshot.connectionState == ConnectionState.waiting &&
+                  _p == null) {
+                return const Center(
+                  child: CircularProgressIndicator(color: AppColors.primary),
+                );
               }
 
               final p = snapshot.data ?? _p!;
@@ -157,13 +162,37 @@ class _ProductScreenState extends State<ProductScreen> {
 
               return CustomScrollView(
                 controller: _scrollController,
-                scrollBehavior: _NoScrollbar(),
-                slivers: [
-                  const SliverToBoxAdapter(child: SizedBox(height: 80)),
-                  SliverToBoxAdapter(child: _buildHeroSection(p)),
-                  SliverToBoxAdapter(child: _buildInfoSection(p)),
-                  const SliverToBoxAdapter(child: SizedBox(height: 200)),
-                ],
+
+                slivers: isMobile
+                    ? [
+                        const SliverToBoxAdapter(child: SizedBox(height: 80)),
+                        SliverToBoxAdapter(child: _buildHeroSection(p)),
+                        SliverToBoxAdapter(child: _buildInfoSection(p)),
+                        const SliverToBoxAdapter(child: SizedBox(height: 200)),
+                      ]
+                    : [
+                        const SliverToBoxAdapter(child: SizedBox(height: 96)),
+                        SliverPadding(
+                          padding: const EdgeInsets.fromLTRB(0, 16, 0, 0),
+                          sliver: SliverToBoxAdapter(
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  flex: 6,
+                                  child: _buildHeroSection(p),
+                                ),
+                                const SizedBox(width: 20),
+                                Expanded(
+                                  flex: 5,
+                                  child: _buildInfoSection(p),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SliverToBoxAdapter(child: SizedBox(height: 140)),
+                      ],
               );
             },
           ),
@@ -173,19 +202,48 @@ class _ProductScreenState extends State<ProductScreen> {
 
           // ── Add to Cart CTA ──────────────────────────────
           Positioned(
-            bottom: 96,
-            left: 24,
-            right: 24,
-            child: _buildAddToCartButton(p),
+            bottom: isMobile ? 96 : 24,
+            left: isMobile ? 24 : 0,
+            right: isMobile ? 24 : 0,
+            child: isMobile
+                ? _buildAddToCartButton(p)
+                : Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 760),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 32),
+                        child: _buildAddToCartButton(p),
+                      ),
+                    ),
+                  ),
           ),
+        ],
+      ),
+    );
 
-          // ── Bottom Navigation ────────────────────────────
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: BottomNav(currentIndex: _navIndex, onTap: _handleNavTap),
-          ),
+    if (isMobile) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        body: Stack(
+          children: [
+            content,
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: BottomNav(currentIndex: _navIndex, onTap: _handleNavTap),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: Row(
+        children: [
+          BottomNav(currentIndex: _navIndex, onTap: _handleNavTap),
+          Expanded(child: content),
         ],
       ),
     );
@@ -389,7 +447,9 @@ class _ProductScreenState extends State<ProductScreen> {
           _buildOverviewCard(p),
           const SizedBox(height: 32),
           _buildSpecGrid(p),
-          if (p.category == 'SHOES' && p.sizes.isNotEmpty && p.sizes.first != 'One Size') ...[
+          if (p.category == 'SHOES' &&
+              p.sizes.isNotEmpty &&
+              p.sizes.first != 'One Size') ...[
             const SizedBox(height: 40),
             _buildSizeSelector(p),
           ],
@@ -809,13 +869,4 @@ class _FeatureItem extends StatelessWidget {
       ],
     );
   }
-}
-
-class _NoScrollbar extends ScrollBehavior {
-  @override
-  Widget buildScrollbar(
-    BuildContext context,
-    Widget child,
-    ScrollableDetails details,
-  ) => child;
 }

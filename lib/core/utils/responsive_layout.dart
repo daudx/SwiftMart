@@ -7,7 +7,7 @@ class ResponsiveLayout extends StatelessWidget {
   const ResponsiveLayout({
     super.key,
     required this.child,
-    this.maxWidth = 800, // Tablet/Web max width constraint
+    this.maxWidth = 1200, // Desktop/Web max width constraint
   });
 
   static bool isMobile(BuildContext context) =>

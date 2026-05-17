@@ -40,7 +40,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // ── Navigation ────────────────────────────────────────────────
 
-
   // ── WIRED: Bottom nav with Shop tab now navigating ────────────
   void _handleBottomNavTap(int index) {
     if (index == _navIndex) return;
@@ -64,44 +63,66 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: ResponsiveLayout(
-        child: Stack(
-          children: [
-            // ── Scrollable Dashboard ──────────────────────────
-            CustomScrollView(
-              controller: _scrollController,
-              scrollBehavior: _NoScrollbarBehavior(),
-              slivers: [
-                const SliverToBoxAdapter(child: SizedBox(height: 100)), // App Bar space
+    final content = ResponsiveLayout(
+      child: Stack(
+        children: [
+          // ── Scrollable Dashboard ──────────────────────────
+          CustomScrollView(
+            controller: _scrollController,
+            slivers: [
+              const SliverToBoxAdapter(
+                child: SizedBox(height: 100),
+              ), // App Bar space
+              // ── Section 1: Hero Carousel (Featured) ──────
+              _buildHeroCarousel(),
 
-                // ── Section 1: Hero Carousel (Featured) ──────
-                _buildHeroCarousel(),
+              // ── Section 2: Categories ─────────────────────
+              _buildCategorySection(),
 
-                // ── Section 2: Categories ─────────────────────
-                _buildCategorySection(),
+              // ── Section 3: Trending Now (Horizontal) ─────
+              _buildTrendingSection(),
 
-                // ── Section 3: Trending Now (Horizontal) ─────
-                _buildTrendingSection(),
+              // ── Section 4: Recommended for You (Grid) ────
+              _buildDiscoveryGridHeader(),
+              _buildDiscoveryGrid(),
 
-                // ── Section 4: Recommended for You (Grid) ────
-                _buildDiscoveryGridHeader(),
-                _buildDiscoveryGrid(),
+              const SliverToBoxAdapter(
+                child: SizedBox(height: 120),
+              ), // Nav space
+            ],
+          ),
 
-                const SliverToBoxAdapter(child: SizedBox(height: 120)), // Nav space
-              ],
+          // ── Sticky Header ─────────────────────────────────
+          Positioned(top: 0, left: 0, right: 0, child: _buildAppBar()),
+        ],
+      ),
+    );
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobile = constraints.maxWidth < 600;
+
+        if (isMobile) {
+          return Scaffold(
+            backgroundColor: AppColors.background,
+            body: content,
+            bottomNavigationBar: BottomNav(
+              currentIndex: _navIndex,
+              onTap: _handleBottomNavTap,
             ),
+          );
+        }
 
-            // ── Sticky Header ─────────────────────────────────
-            Positioned(top: 0, left: 0, right: 0, child: _buildAppBar()),
-          ],
-        ),
-      ),
-      bottomNavigationBar: BottomNav(
-        currentIndex: _navIndex,
-        onTap: _handleBottomNavTap,
-      ),
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          body: Row(
+            children: [
+              BottomNav(currentIndex: _navIndex, onTap: _handleBottomNavTap),
+              Expanded(child: content),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -178,7 +199,8 @@ class _HomeScreenState extends State<HomeScreen> {
       child: StreamBuilder<List<ProductModel>>(
         stream: _productService.getProductsStream(),
         builder: (context, snapshot) {
-          final featured = snapshot.data?.where((p) => p.isFeatured).toList() ?? [];
+          final featured =
+              snapshot.data?.where((p) => p.isFeatured).toList() ?? [];
           if (featured.isEmpty) return const SizedBox.shrink();
 
           return Container(
@@ -196,7 +218,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildHeroSlide(ProductModel p) {
     return GestureDetector(
-      onTap: () => Navigator.pushNamed(context, AppRoutes.product, arguments: p),
+      onTap: () =>
+          Navigator.pushNamed(context, AppRoutes.product, arguments: p),
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 24),
         decoration: BoxDecoration(
@@ -215,7 +238,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   gradient: LinearGradient(
                     begin: Alignment.topCenter,
                     end: Alignment.bottomCenter,
-                    colors: [Colors.transparent, Colors.black.withValues(alpha: 0.8)],
+                    colors: [
+                      Colors.transparent,
+                      Colors.black.withValues(alpha: 0.8),
+                    ],
                   ),
                 ),
               ),
@@ -227,19 +253,39 @@ class _HomeScreenState extends State<HomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
                       decoration: BoxDecoration(
                         color: AppColors.tertiary,
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: const Text('FEATURED',
-                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.black)),
+                      child: const Text(
+                        'FEATURED',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.black,
+                        ),
+                      ),
                     ),
                     const SizedBox(height: 8),
-                    Text(p.name,
-                      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.white)),
-                    Text('Premium Quality • Limited Edition',
-                      style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.7))),
+                    Text(
+                      p.name,
+                      style: const TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                      ),
+                    ),
+                    Text(
+                      'Premium Quality • Limited Edition',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.white.withValues(alpha: 0.7),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -258,8 +304,14 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           const Padding(
             padding: EdgeInsets.fromLTRB(24, 24, 24, 16),
-            child: Text('Categories',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.white)),
+            child: Text(
+              'Categories',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                color: Colors.white,
+              ),
+            ),
           ),
           SizedBox(
             height: 100,
@@ -271,17 +323,31 @@ class _HomeScreenState extends State<HomeScreen> {
               itemBuilder: (ctx, i) {
                 final cat = AppConstants.productCategories[i];
                 return GestureDetector(
-                  onTap: () => Navigator.pushNamed(context, AppRoutes.shop), // Should pass category arg
+                  onTap: () => Navigator.pushNamed(
+                    context,
+                    AppRoutes.shop,
+                  ), // Should pass category arg
                   child: Column(
                     children: [
                       SwiftNeumorphicContainer(
                         type: NeumorphicType.raised,
                         borderRadius: 999,
                         padding: const EdgeInsets.all(16),
-                        child: Icon(_categoryIcon(cat), color: AppColors.primary, size: 24),
+                        child: Icon(
+                          _categoryIcon(cat),
+                          color: AppColors.primary,
+                          size: 24,
+                        ),
                       ),
                       const SizedBox(height: 8),
-                      Text(cat, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.onSurfaceVariant)),
+                      Text(
+                        cat,
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.onSurfaceVariant,
+                        ),
+                      ),
                     ],
                   ),
                 );
@@ -304,10 +370,22 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Trending Now',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.white)),
-                Text('See All',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.tertiary)),
+                Text(
+                  'Trending Now',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                  ),
+                ),
+                Text(
+                  'See All',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.tertiary,
+                  ),
+                ),
               ],
             ),
           ),
@@ -334,7 +412,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildTrendingCard(ProductModel p) {
     return GestureDetector(
-      onTap: () => Navigator.pushNamed(context, AppRoutes.product, arguments: p),
+      onTap: () =>
+          Navigator.pushNamed(context, AppRoutes.product, arguments: p),
       child: Container(
         width: 150,
         decoration: BoxDecoration(
@@ -347,8 +426,14 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             Expanded(
               child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-                child: Image.network(p.imageUrl, fit: BoxFit.cover, width: double.infinity),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(24),
+                ),
+                child: Image.network(
+                  p.imageUrl,
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                ),
               ),
             ),
             Padding(
@@ -356,11 +441,24 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(p.name,
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
-                    maxLines: 1, overflow: TextOverflow.ellipsis),
-                  Text(AppUtils.formatPrice(p.price),
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: AppColors.tertiary)),
+                  Text(
+                    p.name,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    AppUtils.formatPrice(p.price),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.tertiary,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -375,8 +473,14 @@ class _HomeScreenState extends State<HomeScreen> {
     return const SliverToBoxAdapter(
       child: Padding(
         padding: EdgeInsets.fromLTRB(24, 40, 24, 16),
-        child: Text('Discover More',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Colors.white)),
+        child: Text(
+          'Discover More',
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w900,
+            color: Colors.white,
+          ),
+        ),
       ),
     );
   }
@@ -386,20 +490,33 @@ class _HomeScreenState extends State<HomeScreen> {
       stream: _productService.getProductsStream(),
       builder: (context, snapshot) {
         final products = snapshot.data ?? [];
-        return SliverPadding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          sliver: SliverGrid(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-              childAspectRatio: 0.7,
-            ),
-            delegate: SliverChildBuilderDelegate(
-              (ctx, i) => _buildGridCard(products[i]),
-              childCount: products.length > 8 ? 8 : products.length,
-            ),
-          ),
+        return SliverLayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.crossAxisExtent;
+            final crossAxisCount = width >= 1400
+                ? 5
+                : width >= 1100
+                ? 4
+                : width >= 750
+                ? 3
+                : 2;
+
+            return SliverPadding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              sliver: SliverGrid(
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: crossAxisCount,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                  childAspectRatio: crossAxisCount >= 4 ? 0.78 : 0.7,
+                ),
+                delegate: SliverChildBuilderDelegate(
+                  (ctx, i) => _buildGridCard(products[i]),
+                  childCount: products.length > 8 ? 8 : products.length,
+                ),
+              ),
+            );
+          },
         );
       },
     );
@@ -407,7 +524,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildGridCard(ProductModel p) {
     return GestureDetector(
-      onTap: () => Navigator.pushNamed(context, AppRoutes.product, arguments: p),
+      onTap: () =>
+          Navigator.pushNamed(context, AppRoutes.product, arguments: p),
       child: Container(
         decoration: BoxDecoration(
           color: AppColors.surfaceContainerHigh,
@@ -420,8 +538,14 @@ class _HomeScreenState extends State<HomeScreen> {
             Expanded(
               flex: 3,
               child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-                child: Image.network(p.imageUrl, fit: BoxFit.cover, width: double.infinity),
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(24),
+                ),
+                child: Image.network(
+                  p.imageUrl,
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                ),
               ),
             ),
             Expanded(
@@ -435,18 +559,42 @@ class _HomeScreenState extends State<HomeScreen> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(p.category, style: const TextStyle(fontSize: 8, fontWeight: FontWeight.w900, color: AppColors.secondary)),
-                        Text(p.name,
-                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
-                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                        Text(
+                          p.category,
+                          style: const TextStyle(
+                            fontSize: 8,
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.secondary,
+                          ),
+                        ),
+                        Text(
+                          p.name,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ],
                     ),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(AppUtils.formatPrice(p.price),
-                          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: AppColors.tertiary)),
-                        Icon(Icons.add_circle, color: AppColors.primary.withValues(alpha: 0.5), size: 20),
+                        Text(
+                          AppUtils.formatPrice(p.price),
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.tertiary,
+                          ),
+                        ),
+                        Icon(
+                          Icons.add_circle,
+                          color: AppColors.primary.withValues(alpha: 0.5),
+                          size: 20,
+                        ),
                       ],
                     ),
                   ],
@@ -461,23 +609,23 @@ class _HomeScreenState extends State<HomeScreen> {
 
   IconData _categoryIcon(String cat) {
     switch (cat) {
-      case 'SHOES': return Icons.directions_run;
-      case 'TECH': return Icons.devices;
-      case 'AUDIO': return Icons.headphones;
-      case 'CLOTHES': return Icons.checkroom;
-      case 'FITNESS': return Icons.fitness_center;
-      case 'LABEL': return Icons.local_offer;
-      default: return Icons.apps;
+      case 'SHOES':
+        return Icons.directions_run;
+      case 'TECH':
+        return Icons.devices;
+      case 'AUDIO':
+        return Icons.headphones;
+      case 'CLOTHES':
+        return Icons.checkroom;
+      case 'FITNESS':
+        return Icons.fitness_center;
+      case 'LABEL':
+        return Icons.local_offer;
+      default:
+        return Icons.apps;
     }
   }
 }
 
-// ── Scroll behavior ───────────────────────────────────────────
-class _NoScrollbarBehavior extends ScrollBehavior {
-  @override
-  Widget buildScrollbar(
-    BuildContext context,
-    Widget child,
-    ScrollableDetails details,
-  ) => child;
-}
+// Scroll behavior removed: global `AdaptiveScrollBehavior` is used from
+// `lib/main.dart` to control scrollbar visibility across platforms.

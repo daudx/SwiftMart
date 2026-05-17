@@ -4,7 +4,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_shadows.dart';
 import '../../routes/app_routes.dart';
 import '../../services/auth_service.dart';
-import '../../core/utils/responsive_layout.dart'; // Add this import
+import '../../core/utils/responsive_layout.dart'; 
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -228,14 +228,41 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = MediaQuery.of(context).size.width >= 600;
+
     return Scaffold(
       backgroundColor: AppColors.background,
-      body: ResponsiveLayout(
-        // Wrap the main body
-        child: SingleChildScrollView(
-          child: Column(children: [_buildHeader(), _buildBody()]),
-        ),
-      ),
+      body: isDesktop
+          ? SingleChildScrollView(
+              child: Column(
+                children: [
+                  _buildHeader(),
+                  Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 480),
+                      child: Container(
+                        margin: const EdgeInsets.fromLTRB(32, 48, 32, 48),
+                        padding: const EdgeInsets.all(40),
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceContainerHigh,
+                          borderRadius: BorderRadius.circular(32),
+                          boxShadow: AppShadows.raised,
+                          border: Border.all(
+                            color: AppColors.tertiary.withValues(alpha: 0.05),
+                          ),
+                        ),
+                        child: _buildBody(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          : ResponsiveLayout(
+              child: SingleChildScrollView(
+                child: Column(children: [_buildHeader(), _buildBody()]),
+              ),
+            ),
     );
   }
 
@@ -298,28 +325,21 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Widget _buildBody() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(32, 40, 32, 48),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _buildRoleSelector(),
-          const SizedBox(height: 24),
-          _buildEmailField(),
-          const SizedBox(height: 24),
-          _buildPasswordField(),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildRoleSelector(),
+        const SizedBox(height: 24),
+        _buildEmailField(),
+        const SizedBox(height: 24),
+        _buildPasswordField(),
+        const SizedBox(height: 32),
+        _buildSignInButton(),
+        if (!_isAdminLogin) ...[
           const SizedBox(height: 32),
-          _buildSignInButton(),
-          if (!_isAdminLogin) ...[
-            const SizedBox(height: 32),
-            _buildDivider(),
-            const SizedBox(height: 16),
-            _buildSocialButtons(),
-            const SizedBox(height: 32),
-            _buildFooterLink(),
-          ],
+          _buildFooterLink(),
         ],
-      ),
+      ],
     );
   }
 
@@ -577,90 +597,7 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildDivider() {
-    return Row(
-      children: [
-        Expanded(
-          child: Container(
-            height: 1,
-            color: AppColors.outlineVariant.withValues(alpha: 0.20),
-          ),
-        ),
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 16),
-          child: Text(
-            'OR CONTINUE WITH',
-            style: TextStyle(
-              fontFamily: 'Inter',
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 1.5,
-              color: AppColors.outlineVariant,
-            ),
-          ),
-        ),
-        Expanded(
-          child: Container(
-            height: 1,
-            color: AppColors.outlineVariant.withValues(alpha: 0.20),
-          ),
-        ),
-      ],
-    );
-  }
 
-  Widget _buildSocialButtons() {
-    return Row(
-      children: [
-        Expanded(child: _buildSocialButton(isGoogle: true)),
-        const SizedBox(width: 16),
-        Expanded(child: _buildSocialButton(isGoogle: false)),
-      ],
-    );
-  }
-
-  Widget _buildSocialButton({required bool isGoogle}) {
-    return GestureDetector(
-      onTap: () => _showError(
-        '${isGoogle ? 'Google' : 'Facebook'} sign-in coming soon.',
-      ),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          color: AppColors.surfaceContainerHigh,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: AppShadows.raised,
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            if (isGoogle)
-              const Text(
-                'G',
-                style: TextStyle(
-                  fontFamily: 'Inter',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w900,
-                  color: Color(0xFF4285F4),
-                ),
-              )
-            else
-              const Icon(Icons.facebook, size: 22, color: Color(0xFF1877F2)),
-            const SizedBox(width: 8),
-            Text(
-              isGoogle ? 'Google' : 'Facebook',
-              style: const TextStyle(
-                fontFamily: 'Inter',
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: AppColors.onSurface,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   Widget _buildFooterLink() {
     return Center(

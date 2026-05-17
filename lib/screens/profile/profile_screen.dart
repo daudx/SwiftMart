@@ -203,7 +203,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 16),
 
             // Address
-            _buildSheetField('Shipping Address', addressCtrl, TextInputType.streetAddress),
+            _buildSheetField(
+              'Shipping Address',
+              addressCtrl,
+              TextInputType.streetAddress,
+            ),
             const SizedBox(height: 24),
 
             // Save button
@@ -451,39 +455,51 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: ResponsiveLayout(
-        child: Stack(
-          children: [
-            CustomScrollView(
-              scrollBehavior: _NoScrollbar(),
-              slivers: [
-                const SliverToBoxAdapter(child: SizedBox(height: 72)),
-                SliverToBoxAdapter(
-                  child: Column(
-                    children: [
-                      _buildHeroSection(),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(24, 32, 24, 0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildSectionHeader(),
-                            const SizedBox(height: 16),
-                            _buildSettingsList(),
-                            const SizedBox(height: 32),
-                            _buildSwiftBotCard(),
-                            const SizedBox(height: 120),
-                          ],
-                        ),
+    final isMobile = MediaQuery.of(context).size.width < 600;
+
+    final content = ResponsiveLayout(
+      // Keep profile content centered on laptop/desktop by using a tighter
+      // max width; mobile layout remains unchanged.
+      maxWidth: isMobile ? 1400 : 980,
+      child: Stack(
+        children: [
+          CustomScrollView(
+            slivers: [
+              const SliverToBoxAdapter(child: SizedBox(height: 72)),
+              SliverToBoxAdapter(
+                child: Column(
+                  children: [
+                    _buildHeroSection(),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 32, 24, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _buildSectionHeader(),
+                          const SizedBox(height: 16),
+                          _buildSettingsList(),
+                          const SizedBox(height: 32),
+                          _buildSwiftBotCard(),
+                          const SizedBox(height: 120),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            Positioned(top: 0, left: 0, right: 0, child: _buildAppBar()),
+              ),
+            ],
+          ),
+          Positioned(top: 0, left: 0, right: 0, child: _buildAppBar()),
+        ],
+      ),
+    );
+
+    if (isMobile) {
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        body: Stack(
+          children: [
+            content,
             Positioned(
               bottom: 0,
               left: 0,
@@ -495,6 +511,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ],
         ),
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: Row(
+        children: [
+          BottomNav(currentIndex: _navIndex, onTap: _handleBottomNavTap),
+          Expanded(child: content),
+        ],
       ),
     );
   }
@@ -582,33 +608,40 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
           ),
-          Column(
-            children: [
-              _buildAvatar(),
-              const SizedBox(height: 16),
-              Text(
-                _user.name,
-                style: const TextStyle(
-                  fontFamily: 'Inter',
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: -0.4,
-                  color: Colors.white,
+          Align(
+            alignment: Alignment.center,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                _buildAvatar(),
+                const SizedBox(height: 16),
+                Text(
+                  _user.name,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: -0.4,
+                    color: Colors.white,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                _user.email,
-                style: const TextStyle(
-                  fontFamily: 'Inter',
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  color: Color(0xFF8AB8A0),
+                const SizedBox(height: 4),
+                Text(
+                  _user.email,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontFamily: 'Inter',
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    color: Color(0xFF8AB8A0),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 32),
-              _buildStatsRow(),
-            ],
+                const SizedBox(height: 32),
+                _buildStatsRow(),
+              ],
+            ),
           ),
         ],
       ),
@@ -1028,13 +1061,4 @@ class _NotificationToggleState extends State<_NotificationToggle> {
       ],
     );
   }
-}
-
-class _NoScrollbar extends ScrollBehavior {
-  @override
-  Widget buildScrollbar(
-    BuildContext context,
-    Widget child,
-    ScrollableDetails details,
-  ) => child;
 }

@@ -71,6 +71,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isDesktop = MediaQuery.of(context).size.width >= 600;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Stack(
@@ -91,18 +93,49 @@ class _RegisterScreenState extends State<RegisterScreen> {
             child: Center(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(24, 24, 24, 128),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 448),
-                  child: Column(
-                    children: [
-                      _buildHeaderCard(),
-                      const SizedBox(height: 32),
-                      _buildFormSection(),
-                      const SizedBox(height: 32),
-                      _buildFeatureBadges(),
-                    ],
-                  ),
-                ),
+                child: isDesktop
+                    ? Column(
+                        children: [
+                          _buildHeaderCard(),
+                          const SizedBox(height: 32),
+                          Center(
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 560),
+                              child: Container(
+                                padding: const EdgeInsets.all(40),
+                                decoration: BoxDecoration(
+                                  color: AppColors.surfaceContainerHigh,
+                                  borderRadius: BorderRadius.circular(32),
+                                  boxShadow: AppShadows.raised,
+                                  border: Border.all(
+                                    color: AppColors.tertiary.withValues(alpha: 0.05),
+                                  ),
+                                ),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  children: [
+                                    _buildFormSection(),
+                                    const SizedBox(height: 32),
+                                    _buildFeatureBadges(),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      )
+                    : ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 448),
+                        child: Column(
+                          children: [
+                            _buildHeaderCard(),
+                            const SizedBox(height: 32),
+                            _buildFormSection(),
+                            const SizedBox(height: 32),
+                            _buildFeatureBadges(),
+                          ],
+                        ),
+                      ),
               ),
             ),
           ),

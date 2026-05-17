@@ -17,11 +17,7 @@ class _NavItem {
 
 /// The five nav destinations, in order.
 const List<_NavItem> _navItems = [
-  _NavItem(
-    icon: Icons.home_outlined,
-    iconActive: Icons.home,
-    label: 'HOME',
-  ),
+  _NavItem(icon: Icons.home_outlined, iconActive: Icons.home, label: 'HOME'),
   _NavItem(
     icon: Icons.storefront_outlined,
     iconActive: Icons.storefront,
@@ -62,46 +58,83 @@ class BottomNav extends StatelessWidget {
   final int currentIndex;
   final ValueChanged<int> onTap;
 
-  const BottomNav({
-    super.key,
-    required this.currentIndex,
-    required this.onTap,
-  });
+  const BottomNav({super.key, required this.currentIndex, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      // pt-2 pb-6 px-4  →  top:8 bottom:24 horizontal:16
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-      decoration: const BoxDecoration(
-        color: AppColors.background,
-        // rounded-t-[32px]
-        borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
-        // nav uses 15px blur — slightly larger than standard card shadow
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.shadowDark,
-            offset: Offset(5, 5),
-            blurRadius: 15,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isDesktopRail = constraints.maxWidth >= 600;
+
+        if (!isDesktopRail) {
+          return Container(
+            // pt-2 pb-6 px-4  →  top:8 bottom:24 horizontal:16
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+            decoration: const BoxDecoration(
+              color: AppColors.background,
+              // rounded-t-[32px]
+              borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+              // nav uses 15px blur — slightly larger than standard card shadow
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.shadowDark,
+                  offset: Offset(5, 5),
+                  blurRadius: 15,
+                ),
+                BoxShadow(
+                  color: Color(0xFF2E4A38),
+                  offset: Offset(-5, -5),
+                  blurRadius: 15,
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: List.generate(
+                _navItems.length,
+                (index) => _buildItem(index),
+              ),
+            ),
+          );
+        }
+
+        return Container(
+          width: 96,
+          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 8),
+          decoration: const BoxDecoration(
+            color: AppColors.background,
+            borderRadius: BorderRadius.horizontal(right: Radius.circular(32)),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.shadowDark,
+                offset: Offset(5, 5),
+                blurRadius: 15,
+              ),
+              BoxShadow(
+                color: Color(0xFF2E4A38),
+                offset: Offset(-5, -5),
+                blurRadius: 15,
+              ),
+            ],
           ),
-          BoxShadow(
-            color: Color(0xFF2E4A38),
-            offset: Offset(-5, -5),
-            blurRadius: 15,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: List.generate(
+              _navItems.length,
+              (index) => Padding(
+                padding: EdgeInsets.only(
+                  bottom: index == _navItems.length - 1 ? 0 : 12,
+                ),
+                child: _buildItem(index, isDesktopRail: true),
+              ),
+            ),
           ),
-        ],
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: List.generate(
-          _navItems.length,
-          (index) => _buildItem(index),
-        ),
-      ),
+        );
+      },
     );
   }
 
-  Widget _buildItem(int index) {
+  Widget _buildItem(int index, {bool isDesktopRail = false}) {
     final item = _navItems[index];
     final bool isActive = index == currentIndex;
 
@@ -112,7 +145,8 @@ class BottomNav extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeInOut,
         // p-3 → 12px all sides
-        padding: const EdgeInsets.all(12),
+        padding: EdgeInsets.all(isDesktopRail ? 10 : 12),
+        width: isDesktopRail ? 80 : null,
         decoration: isActive
             ? const BoxDecoration(
                 // Active: bg-[#071611] (background, not surfaceHigh)
@@ -143,7 +177,7 @@ class BottomNav extends StatelessWidget {
             Icon(
               isActive ? item.iconActive : item.icon,
               color: isActive ? AppColors.tertiary : AppColors.textSecondary,
-              size: 26,
+              size: isDesktopRail ? 24 : 26,
             ),
             const SizedBox(height: 4),
             Text(
