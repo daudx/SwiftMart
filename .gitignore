@@ -51,7 +51,6 @@ app.*.map.json
 **/ios/**/*.mode1v3
 **/ios/**/*.mode2v3
 **/ios/**/*.pbxuser
-
 **/ios/**/*.perspectivev3
 **/ios/**/*.xcuserstate
 **/ios/Runner.xcodeproj/project.xcworkspace
@@ -72,3 +71,11 @@ app.*.map.json
 
 # Exceptions to above rules.
 !/packages/flutter_tools/test/data/dart_dependencies_test/**/.packages
+
+# Firebase Config & Secrets
+lib/firebase_options.dart
+android/app/google-services.json
+ios/Runner/GoogleService-Info.plist
+
+# App Constants (Contains API Keys)
+lib/core/constants/app_constant.dart
