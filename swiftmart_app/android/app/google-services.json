@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "189838153482",
+    "project_id": "swiftmart-84807",
+    "storage_bucket": "swiftmart-84807.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:189838153482:android:db5c2be6a2568d04600cf3",
+        "android_client_info": {
+          "package_name": "com.example.swiftmart_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC9szARYNkxUhciECCWuixCN9ifFNfy9-s"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

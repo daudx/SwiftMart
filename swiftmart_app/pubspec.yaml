@@ -1,0 +1,51 @@
+name: swiftmart_app
+description: SwiftMart — Shop fast. Shop smart.
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.8
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # ── UI ──────────────────────────────────────────────────────
+  cupertino_icons: ^1.0.8
+  google_fonts:    ^6.1.0
+
+  # ── Networking ───────────────────────────────────────────────
+  http: ^1.2.1
+
+  # ── Firebase ─────────────────────────────────────────────────
+  firebase_core:    ^3.6.0   # Must always be first Firebase package
+  firebase_auth:    ^5.3.1   # Authentication
+  cloud_firestore:  ^5.4.4   # Database
+  
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/fonts/
+
+  fonts:
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Inter-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Inter-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Inter-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/Inter-ExtraBold.ttf
+          weight: 800
+        - asset: assets/fonts/Inter-Black.ttf
+          weight: 900
